@@ -4,5 +4,6 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="/home/kai/code/bachelor/bitnym-julien/PTP.jar"/>
 	<classpathentry kind="lib" path="/home/kai/code/bachelor/bitnym-julien/bitcoinj-core-0.14.3-bundled.jar"/>
+	<classpathentry kind="lib" path="/home/kai/code/bachelor/bitnym-julien/slf4j-simple-1.6.2.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
