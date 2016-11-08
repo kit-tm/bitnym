@@ -15,6 +15,7 @@ import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
+import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.params.TestNet3Params;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.store.BlockStoreException;
@@ -62,23 +63,35 @@ public class MainClass {
 		}
 		//use newWithTor instead? 
 		PeerGroup pg = new PeerGroup(params, bc);
+		pg.addWallet(wallet);
+		System.out.println(params.getPort());
 		try {
+			//TODO substitute with addPeerDiscovery and iterate over it
 			System.out.println("add addresses");
+			//add testnet-seed.bitcoin.petertodd.org
+			pg.addAddress(InetAddress.getByName("121.42.142.181"));
+			//pg.addAddress(InetAddress.getByName("bluematt.me"));
 			//pg.addAddress(InetAddress.getByName("46.166.165.18"));
+			//pg.addAddress(InetAddress.getByName("104.16.55.3"));
+			//pg.addAddress(InetAddress.getByName("104.16.54.3"));
 			//pg.addAddress(InetAddress.getByName("71.199.135.215"));
-			pg.addAddress(InetAddress.getByName("bitcoins.sk"));
-			pg.addAddress(InetAddress.getByName("btc.smsys.me"));
-			pg.addAddress(InetAddress.getByName("btc.vpirate.org"));
-			pg.addAddress(InetAddress.getByName("cluelessperson.com"));
-			pg.addAddress(InetAddress.getByName("condor1003.server4you.de"));
-			pg.addAddress(InetAddress.getByName("electrum.rofl.cat"));
-			pg.addAddress(InetAddress.getByName("electrum.snipanet.com"));
-			pg.addAddress(InetAddress.getByName("btc.smsys.me"));
-			pg.addAddress(InetAddress.getByName("electrum3.hachre.de"));
-			pg.addAddress(InetAddress.getByName("uselectrum.be"));
-			pg.addAddress(InetAddress.getByName("vps1.au.f4e.pw"));
-			pg.addAddress(InetAddress.getByName("ulrichard.ch"));
-			pg.addAddress(InetAddress.getByName("ilikehuskies.no-ip.org"));
+			//pg.addAddress(InetAddress.getByName("bitcoins.sk"));
+			//pg.addAddress(InetAddress.getByName("btc.smsys.me"));
+//			pg.addAddress(InetAddress.getByName("btc.vpirate.org"));
+	//		pg.addAddress(InetAddress.getByName("cluelessperson.com"));
+		//	pg.addAddress(InetAddress.getByName("condor1003.server4you.de"));
+//			pg.addAddress(InetAddress.getByName("electrum.rofl.cat"));
+			//pg.addAddress(InetAddress.getByName("electrum.snipanet.com"));
+			//pg.addAddress(InetAddress.getByName("btc.smsys.me"));
+			//pg.addAddress(InetAddress.getByName("electrum3.hachre.de"));
+			//pg.addAddress(InetAddress.getByName("uselectrum.be"));
+			//pg.addAddress(InetAddress.getByName("vps1.au.f4e.pw"));
+			//pg.addAddress(InetAddress.getByName("ulrichard.ch"));
+			//pg.addAddress(InetAddress.getByName("ilikehuskies.no-ip.org"));
+			//pg.addAddress(InetAddress.getByName("5.9.2.145"));
+			//pg.addAddress(InetAddress.getByName("176.9.24.110"));
+//			pg.addAddress(InetAddress.getByName("144.76.46.66"));
+			//pg.addAddress(InetAddress.getByName("109.123.116.245"));
 			System.out.println("added addresses");
 		} catch (UnknownHostException e3) {
 			// TODO Auto-generated catch block
@@ -87,7 +100,7 @@ public class MainClass {
 		System.out.println("download chain");
 		pg.start();
 		pg.downloadBlockChain();
-		pg.stop();
+		
 		
 		System.out.println(wallet.currentReceiveAddress().toBase58());
 		try {
@@ -112,6 +125,7 @@ public class MainClass {
 		}
 		
 
+		pg.stop();
 	}
 	
 	private static void generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w) throws InsufficientMoneyException {
