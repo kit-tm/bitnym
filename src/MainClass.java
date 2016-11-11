@@ -4,6 +4,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.bitcoinj.core.BlockChain;
@@ -20,6 +21,7 @@ import org.bitcoinj.params.TestNet3Params;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.store.SPVBlockStore;
+import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.DeterministicSeed;
 
@@ -104,8 +106,8 @@ public class MainClass {
 		
 		System.out.println(wallet.currentReceiveAddress().toBase58());
 		try {
-			System.out.println("sleep for 15minutes");
-			TimeUnit.MINUTES.sleep(15);
+			System.out.println("sleep for 10minutes");
+			TimeUnit.MINUTES.sleep(10);
 		} catch (InterruptedException e2) {
 			// TODO Auto-generated catch block
 			e2.printStackTrace();
@@ -130,14 +132,27 @@ public class MainClass {
 	
 	private static void generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w) throws InsufficientMoneyException {
 		Transaction tx = new Transaction(params);
+		byte[] opretData = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
 		//TODO add transaction fee in the comparison?
 		if (w.getBalance().isLessThan(PROOF_OF_BURN)) {
 			throw new InsufficientMoneyException(PROOF_OF_BURN.minus(w.getBalance()));
 		}
-		List<TransactionOutput> unspents = w.getUnspents();
+		//add marker output
+		tx.addOutput(PROOF_OF_BURN, ScriptBuilder.createOpReturnScript(opretData));
+		
+		//add pseudonym output
+		ECKey psnymKey = new ECKey();
+		Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
+		w.importKey(psnymKey);
 		
 		Coin suffInptValue = Coin.ZERO;
+		
+		tx.addOutput(new TransactionOutput(params, tx, suffInptValue.minus(PROOF_OF_BURN.minus(FEE)), nymAdrs));
+		
+		List<TransactionOutput> unspents = w.getUnspents();
+		
+		
 		
 		Iterator<TransactionOutput> iterator = unspents.iterator();
 		//TODO use only certain inputs, if so why use certain inputs?
@@ -145,16 +160,9 @@ public class MainClass {
 			TransactionOutput next = iterator.next();
 			suffInptValue = suffInptValue.add(next.getValue());
 			tx.addSignedInput(next.getOutPointFor(), next.getScriptPubKey() ,next.getOutPointFor().getConnectedKey(w));
-			;
 		}
+				
 		
-		//add marker output
-		tx.addOutput(PROOF_OF_BURN, ScriptBuilder.createOpReturnScript(null));
-		//add pseudonym output
-		ECKey psnymKey = new ECKey();
-		Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
-		w.importKey(psnymKey);
-		tx.addOutput(new TransactionOutput(params, tx, suffInptValue.minus(PROOF_OF_BURN.minus(FEE)), nymAdrs));
 		//TODO add change, for know we add everything except PoB and fees to the psnym
 		
 		
@@ -162,6 +170,23 @@ public class MainClass {
 			System.out.println("verify the transaction");
 			tx.verify();
 		} catch (VerificationException e) {
+			e.printStackTrace();
+		}
+		
+		SendRequest req = SendRequest.forTx(tx);
+		req.shuffleOutputs = false;
+		req.signInputs = false;
+		req.ensureMinRequiredFee = false;
+		req.feePerKb = Coin.ZERO;
+		
+		Wallet.SendResult result = w.sendCoins(req);
+		try {
+			result.broadcastComplete.get();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ExecutionException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
