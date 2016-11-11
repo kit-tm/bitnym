@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
@@ -16,6 +17,9 @@ import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
+import org.bitcoinj.net.BlockingClientManager;
+import org.bitcoinj.net.discovery.DnsDiscovery;
+import org.bitcoinj.net.discovery.TorDiscovery;
 import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.params.TestNet3Params;
 import org.bitcoinj.script.ScriptBuilder;
@@ -28,6 +32,7 @@ import org.bitcoinj.wallet.DeterministicSeed;
 import org.bitcoinj.core.Address;
 
 import com.mysql.jdbc.TimeUtil;
+import com.subgraph.orchid.TorClient;
 
 
 
@@ -63,42 +68,14 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		//use newWithTor instead? 
-		PeerGroup pg = new PeerGroup(params, bc);
+		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
+		System.setProperty("socksProxyHost", "127.0.0.1");
+		System.setProperty("socksProxyPort", "9050");
+		PeerGroup pg = new PeerGroup(params, bc, new BlockingClientManager());
 		pg.addWallet(wallet);
-		System.out.println(params.getPort());
-		try {
-			//TODO substitute with addPeerDiscovery and iterate over it
-			System.out.println("add addresses");
-			//add testnet-seed.bitcoin.petertodd.org
-			pg.addAddress(InetAddress.getByName("121.42.142.181"));
-			//pg.addAddress(InetAddress.getByName("bluematt.me"));
-			//pg.addAddress(InetAddress.getByName("46.166.165.18"));
-			//pg.addAddress(InetAddress.getByName("104.16.55.3"));
-			//pg.addAddress(InetAddress.getByName("104.16.54.3"));
-			//pg.addAddress(InetAddress.getByName("71.199.135.215"));
-			//pg.addAddress(InetAddress.getByName("bitcoins.sk"));
-			//pg.addAddress(InetAddress.getByName("btc.smsys.me"));
-//			pg.addAddress(InetAddress.getByName("btc.vpirate.org"));
-	//		pg.addAddress(InetAddress.getByName("cluelessperson.com"));
-		//	pg.addAddress(InetAddress.getByName("condor1003.server4you.de"));
-//			pg.addAddress(InetAddress.getByName("electrum.rofl.cat"));
-			//pg.addAddress(InetAddress.getByName("electrum.snipanet.com"));
-			//pg.addAddress(InetAddress.getByName("btc.smsys.me"));
-			//pg.addAddress(InetAddress.getByName("electrum3.hachre.de"));
-			//pg.addAddress(InetAddress.getByName("uselectrum.be"));
-			//pg.addAddress(InetAddress.getByName("vps1.au.f4e.pw"));
-			//pg.addAddress(InetAddress.getByName("ulrichard.ch"));
-			//pg.addAddress(InetAddress.getByName("ilikehuskies.no-ip.org"));
-			//pg.addAddress(InetAddress.getByName("5.9.2.145"));
-			//pg.addAddress(InetAddress.getByName("176.9.24.110"));
-//			pg.addAddress(InetAddress.getByName("144.76.46.66"));
-			//pg.addAddress(InetAddress.getByName("109.123.116.245"));
-			System.out.println("added addresses");
-		} catch (UnknownHostException e3) {
-			// TODO Auto-generated catch block
-			e3.printStackTrace();
-		}
+		
+		//TODO DNS through Tor without Orchid, as it is not maintained
+		pg.addPeerDiscovery(new DnsDiscovery(params));
 		System.out.println("download chain");
 		pg.start();
 		pg.downloadBlockChain();
