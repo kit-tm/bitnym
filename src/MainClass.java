@@ -8,6 +8,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import javax.annotation.RegEx;
+
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
@@ -42,7 +44,9 @@ public class MainClass {
 	
 	
 	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
-	private static Coin FEE = Coin.valueOf(500000);
+	private static Coin FEE = Coin.valueOf(5000000);
+	private static Coin PSNYMVALUE = Coin.valueOf(1000000);
+	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(FEE));
 
 	/**
 	 * @param args
@@ -99,14 +103,18 @@ public class MainClass {
 		
 		
 		System.out.println(wallet.currentReceiveAddress().toBase58());
-		try {
-			System.out.println("sleep for 10minutes");
-			TimeUnit.MINUTES.sleep(10);
-		} catch (InterruptedException e2) {
-			// TODO Auto-generated catch block
-			e2.printStackTrace();
+		if(wallet.getBalance().isLessThan(totalOutput)) {
+			//use faucet to get some coins
+			try {
+				System.out.println("sleep for 10minutes");
+				TimeUnit.MINUTES.sleep(10);
+			} catch (InterruptedException e2) {
+				// TODO Auto-generated catch block
+				e2.printStackTrace();
+			}
 		}
-		System.out.println(wallet.getBalance().toString());
+		
+		System.out.println("Current balance: " + wallet.getBalance().toFriendlyString());
 		try {
 			wallet.saveToFile(f);
 		} catch (IOException e1) {
@@ -142,24 +150,24 @@ public class MainClass {
 		
 		Coin suffInptValue = Coin.ZERO;
 		
-		tx.addOutput(new TransactionOutput(params, tx, suffInptValue.minus(PROOF_OF_BURN.minus(FEE)), nymAdrs));
+
 		
 		List<TransactionOutput> unspents = w.getUnspents();
-		
-		
-		
+				
 		Iterator<TransactionOutput> iterator = unspents.iterator();
 		//TODO use only certain inputs, if so why use certain inputs?
-		while(suffInptValue.isLessThan(PROOF_OF_BURN) && iterator.hasNext()) {
+		while(suffInptValue.isLessThan(totalOutput) && iterator.hasNext()) {
 			TransactionOutput next = iterator.next();
 			suffInptValue = suffInptValue.add(next.getValue());
-			tx.addSignedInput(next.getOutPointFor(), next.getScriptPubKey() ,next.getOutPointFor().getConnectedKey(w));
+			tx.addInput(next);
 		}
 				
+		tx.addOutput(new TransactionOutput(params, tx, PSNYMVALUE, nymAdrs));
 		
 		//TODO add change, for know we add everything except PoB and fees to the psnym
-		
-		
+		ECKey changeKey = new ECKey();
+		Address changeAdrs = new Address(params, changeKey.getPubKeyHash());
+//		tx.addOutput(new TransactionOutput(params, tx, suffInptValue.minus(totalOutput), changeAdrs));	
 		try {
 			System.out.println("verify the transaction");
 			tx.verify();
@@ -168,11 +176,9 @@ public class MainClass {
 		}
 		
 		SendRequest req = SendRequest.forTx(tx);
+		req.changeAddress = changeAdrs;
 		req.shuffleOutputs = false;
-		req.signInputs = false;
-		req.ensureMinRequiredFee = false;
-		req.feePerKb = Coin.ZERO;
-		
+		req.signInputs = true;
 		Wallet.SendResult result = w.sendCoins(req);
 		try {
 			result.broadcastComplete.get();
