@@ -33,7 +33,7 @@ public class MainClass {
 	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
 	private static Coin FEE = Coin.valueOf(5000000);
 	private static Coin PSNYMVALUE = Coin.valueOf(1000000);
-	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(FEE));
+	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
 
 	/**
 	 * @param args
