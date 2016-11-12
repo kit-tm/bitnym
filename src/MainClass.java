@@ -26,6 +26,7 @@ import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.store.SPVBlockStore;
 import org.bitcoinj.wallet.SendRequest;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.DeterministicSeed;
 
@@ -50,8 +51,24 @@ public class MainClass {
 		//initialize neccessary bitcoinj variables
 		final NetworkParameters params = TestNet3Params.get();
 		
-		Wallet wallet = new Wallet(params);
+		Wallet wallet = null;
 		File f = new File("./wallet.wa");
+		if(!f.exists()) {
+			wallet = new Wallet(params);
+			try {
+				wallet.saveToFile(f);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		} else {
+			try {
+				wallet = Wallet.loadFromFile(f, null);
+			} catch (UnreadableWalletException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 		File bs = new File("./blockstore.bc");
 		wallet.autosaveToFile(f, 2, TimeUnit.MINUTES, null);
 		SPVBlockStore spvbs = null;
