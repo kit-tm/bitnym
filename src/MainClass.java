@@ -9,6 +9,7 @@ import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
@@ -31,8 +32,7 @@ public class MainClass {
 	
 	
 	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
-	private static Coin FEE = Coin.valueOf(5000000);
-	private static Coin PSNYMVALUE = Coin.valueOf(1000000);
+	private static Coin PSNYMVALUE = Coin.valueOf(200000);
 	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
 
 	/**
@@ -108,12 +108,21 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
+		
 		try {
-			generateGenesisTransaction(params, pg, wallet);
+			System.out.println("sendBroadcastAnnouncement");
+			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement());
 		} catch (InsufficientMoneyException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+//		try {
+//			generateGenesisTransaction(params, pg, wallet);
+//		} catch (InsufficientMoneyException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 		
 
 		pg.stop();
@@ -123,7 +132,6 @@ public class MainClass {
 		Transaction tx = new Transaction(params);
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
-		//TODO add transaction fee in the comparison?
 		if (w.getBalance().isLessThan(PROOF_OF_BURN)) {
 			throw new InsufficientMoneyException(PROOF_OF_BURN.minus(w.getBalance()));
 		}
@@ -143,6 +151,7 @@ public class MainClass {
 				
 		Iterator<TransactionOutput> iterator = unspents.iterator();
 		//TODO use only certain inputs, if so why use certain inputs?
+		//TODO use CoinSelector instead
 		while(suffInptValue.isLessThan(totalOutput) && iterator.hasNext()) {
 			TransactionOutput next = iterator.next();
 			suffInptValue = suffInptValue.add(next.getValue());
