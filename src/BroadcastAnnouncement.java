@@ -1,6 +1,12 @@
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.Serializable;
 
+import javax.swing.text.html.HTMLDocument.HTMLReader.IsindexAction;
+
 import org.bitcoinj.core.Address;
+import org.spongycastle.util.Arrays;
 
 
 public class BroadcastAnnouncement implements Serializable {
@@ -25,13 +31,28 @@ public class BroadcastAnnouncement implements Serializable {
 //		this.acceptableLossValue = aLV;
 //	}
 
+	//TODO deserialize and check magicNumber
 	public static boolean isBroadcastAnnouncementScript(byte[] script) {
-		byte[] x = new byte[4];
-		x[0] = script[1];
-		x[1] = script[2];
-		x[2] = script[3];
-		x[3] = script[4];
-		return x.equals(magicNumber);
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(script));
+		byte[] minusOpReturn = Arrays.copyOfRange(script, 3, script.length);
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(minusOpReturn));
+		ByteArrayInputStream bais = new ByteArrayInputStream(minusOpReturn);
+		try {
+			ObjectInputStream ois = new ObjectInputStream(bais);
+			Object bca = ois.readObject();
+			if (bca instanceof BroadcastAnnouncement) {
+				return true;
+			}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		return false;
+		
 	}
 
 }

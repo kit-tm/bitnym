@@ -109,6 +109,10 @@ public class MainClass {
 			e1.printStackTrace();
 		}
 		
+		MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc);
+		bc.addNewBestBlockListener(mpd);
+		
+		
 		try {
 			System.out.println("sendBroadcastAnnouncement");
 			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement());
@@ -124,7 +128,12 @@ public class MainClass {
 //			e.printStackTrace();
 //		}
 		
-
+		try {
+			TimeUnit.MINUTES.sleep(20);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		pg.stop();
 	}
 	

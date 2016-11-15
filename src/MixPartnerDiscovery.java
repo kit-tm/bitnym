@@ -2,6 +2,7 @@
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -38,6 +39,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 		this.pg = pg;
 		this.bc = bc;
 		this.head = null;
+		this.broadcasts = new ArrayList<Transaction>();
 	}
 	
 	//method for experimenting
@@ -71,6 +73,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 		
 		List<Transaction> listTxs = block.getTransactions();
 		for(Transaction tx : listTxs) {
+			System.out.println("test transaction " + tx.getHashAsString());
 			if(isTransactionBroadcastAnnouncement(tx)) {
 				broadcasts.add(tx);
 				System.out.println("found a broadcast announcement!");
@@ -157,6 +160,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		System.out.println("searchCurrentBlockForPartners");
 		searchCurrentBlockForPartners();
 	}
 	
