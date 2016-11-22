@@ -1,11 +1,14 @@
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
-import javax.swing.text.html.HTMLDocument.HTMLReader.IsindexAction;
-
-import org.bitcoinj.core.Address;
+import org.bitcoinj.script.Script;
+import org.bitcoinj.script.ScriptBuilder;
+import org.bitcoinj.script.ScriptChunk;
+import org.bitcoinj.script.ScriptOpCodes;
 import org.spongycastle.util.Arrays;
 
 
@@ -14,7 +17,7 @@ public class BroadcastAnnouncement implements Serializable {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private static byte[] magicNumber = {(byte) 0xa0,(byte) 0x4f, (byte) 0xff, (byte) 0xac};
+	public transient static byte[] magicNumber = {(byte) 0xa0,(byte) 0x4f, (byte) 0xff, (byte) 0xac};
 //	private Address address;
 //	private String onionAddress;
 //	private int mixValue;
@@ -34,25 +37,42 @@ public class BroadcastAnnouncement implements Serializable {
 	//TODO deserialize and check magicNumber
 	public static boolean isBroadcastAnnouncementScript(byte[] script) {
 		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(script));
-		byte[] minusOpReturn = Arrays.copyOfRange(script, 3, script.length);
-		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(minusOpReturn));
-		ByteArrayInputStream bais = new ByteArrayInputStream(minusOpReturn);
-		try {
-			ObjectInputStream ois = new ObjectInputStream(bais);
-			Object bca = ois.readObject();
-			if (bca instanceof BroadcastAnnouncement) {
-				return true;
+		//TODO expand this to full verification, e.g. parsing the script
+		if(script[1] == 0x04) {
+			for(int i=0; i<4; i++) {
+				if(script[2+i] != magicNumber[i]) {
+					return false;
+				}
 			}
+		}
+		
+		
+		return true;
+		
+	}
+	
+	public Script buildScript() {
+		ScriptBuilder sbuilder = new ScriptBuilder();
+		sbuilder = sbuilder.op(ScriptOpCodes.OP_RETURN);
+		ScriptChunk protocolIdentifier = new ScriptChunk((byte) magicNumber.length, magicNumber);
+		sbuilder = sbuilder.addChunk(protocolIdentifier);
+		
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		ObjectOutputStream oos;
+		try {
+			oos = new ObjectOutputStream(baos);
+			oos.writeObject(this);
+			oos.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ClassNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
-		return false;
 		
+		ScriptChunk dataChunk = new ScriptChunk(baos.toByteArray().length, baos.toByteArray());
+		sbuilder = sbuilder.addChunk(dataChunk);
+		
+		return sbuilder.build();
 	}
 
 }

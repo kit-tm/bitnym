@@ -4,6 +4,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
@@ -61,6 +62,8 @@ public class MainClass {
 			}
 		}
 		File bs = new File("./blockstore.bc");
+		//TODO check if this does the job
+		wallet.getBloomFilter(0).insert(BroadcastAnnouncement.magicNumber);
 		wallet.autosaveToFile(f, 2, TimeUnit.MINUTES, null);
 		SPVBlockStore spvbs = null;
 		BlockChain bc = null;
@@ -144,6 +147,9 @@ public class MainClass {
 		if (w.getBalance().isLessThan(PROOF_OF_BURN)) {
 			throw new InsufficientMoneyException(PROOF_OF_BURN.minus(w.getBalance()));
 		}
+
+		
+		
 		//add marker output
 		tx.addOutput(PROOF_OF_BURN, ScriptBuilder.createOpReturnScript(opretData));
 		
@@ -154,7 +160,6 @@ public class MainClass {
 		
 		Coin suffInptValue = Coin.ZERO;
 		
-
 		
 		List<TransactionOutput> unspents = w.getUnspents();
 				

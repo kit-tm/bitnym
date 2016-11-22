@@ -1,9 +1,5 @@
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -19,7 +15,7 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
-import org.bitcoinj.script.ScriptBuilder;
+import org.bitcoinj.script.Script;
 import org.bitcoinj.wallet.DefaultCoinSelector;
 import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
@@ -99,25 +95,11 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba) throws InsufficientMoneyException {
 		//build transaction
 		Transaction tx = new Transaction(params);
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		ObjectOutputStream oos;
-		try {
-			oos = new ObjectOutputStream(baos);
-			oos.writeObject(ba);
-			oos.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 		
-		byte[] array = baos.toByteArray();
-		byte[][] chunks = splitArrayTo80ByteChunks(array);
+		Script s = ba.buildScript();
+		//System.out.println(s.getScriptType());
 		
-		for(byte[] chunk : chunks) {
-			assert(chunk.length <= 80);
-			tx.addOutput(Coin.ZERO, ScriptBuilder.createOpReturnScript(chunk));
-		}
-		
+		tx.addOutput(Coin.ZERO, s);
 		
 		SendRequest req = SendRequest.forTx(tx);
 		req.coinSelector = new DefaultCoinSelector();
@@ -136,20 +118,12 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 		}
 	}
 
-	//every op return script output can hold 40 bytes
-	private static byte[][] splitArrayTo80ByteChunks(byte[] array) {
-		System.out.println(array.length);
-		byte[][] result = new byte[array.length/80 +1][];
-		for(int i=0; i<=(array.length/80); i++) {
-			result[i] = Arrays.copyOfRange(array, i*80,Math.max((i+1)*80, array.length)-1);
-		}
-		return result;
-	}
 
 	@Override
 	public void notifyNewBestBlock(StoredBlock sblock)
 			throws VerificationException {
 		Peer p = pg.getDownloadPeer();
+		
 		ListenableFuture<Block> futureBlock = p.getBlock(sblock.getHeader().getHash());
 		try {
 			this.head = futureBlock.get();
