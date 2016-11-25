@@ -2,16 +2,22 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import javax.annotation.Nullable;
+
+import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
+import org.bitcoinj.core.FilteredBlock;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
+import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
@@ -25,6 +31,7 @@ import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.core.Address;
+import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
 
 
 
@@ -112,9 +119,20 @@ public class MainClass {
 			e1.printStackTrace();
 		}
 		
-		MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc);
-		bc.addNewBestBlockListener(mpd);
+		//MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc);
+		//bc.addNewBestBlockListener(mpd);
 		
+		pg.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
+			
+			@Override
+			public void onBlocksDownloaded(Peer arg0, Block arg1,
+					@Nullable FilteredBlock arg2, int arg3) {
+				Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
+				for(Transaction tx : assocTxs.values()) {
+					System.out.println(tx);
+				}
+				}
+		});
 		
 		try {
 			System.out.println("sendBroadcastAnnouncement");

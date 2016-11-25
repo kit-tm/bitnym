@@ -17,6 +17,7 @@ public class BroadcastAnnouncement implements Serializable {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
+	//used in the bloom filter for efficient identification of bitnym broadcasts
 	public transient static byte[] magicNumber = {(byte) 0xa0,(byte) 0x4f, (byte) 0xff, (byte) 0xac};
 //	private Address address;
 //	private String onionAddress;

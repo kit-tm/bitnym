@@ -123,6 +123,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 	public void notifyNewBestBlock(StoredBlock sblock)
 			throws VerificationException {
 		Peer p = pg.getDownloadPeer();
+		//use p.setbloomfilter or is this automatically done?
 		
 		ListenableFuture<Block> futureBlock = p.getBlock(sblock.getHeader().getHash());
 		try {
