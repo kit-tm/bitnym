@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
+import org.bitcoinj.core.BloomFilter;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.FilteredBlock;
@@ -32,6 +33,7 @@ import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
+import org.bitcoinj.core.listeners.PeerDisconnectedEventListener;
 
 
 
@@ -70,7 +72,8 @@ public class MainClass {
 		}
 		File bs = new File("./blockstore.bc");
 		//TODO check if this does the job
-		wallet.getBloomFilter(0).insert(BroadcastAnnouncement.magicNumber);
+//		System.out.println("num of elem " + wallet.getBloomFilterElementCount());
+		//wallet.getBloomFilter(0).insert(BroadcastAnnouncement.magicNumber);
 		wallet.autosaveToFile(f, 2, TimeUnit.MINUTES, null);
 		SPVBlockStore spvbs = null;
 		BlockChain bc = null;
@@ -95,8 +98,13 @@ public class MainClass {
 		//TODO DNS through Tor without Orchid, as it is not maintained
 		pg.addPeerDiscovery(new DnsDiscovery(params));
 		System.out.println("download chain");
-		pg.start();
+		pg.start();		
 		pg.downloadBlockChain();
+		Peer downloadpeer = pg.getDownloadPeer();
+		BloomFilter bf = new BloomFilter(10, 0.005, 1);
+		bf.insert(BroadcastAnnouncement.magicNumber);
+		downloadpeer.setBloomFilter(bf);
+		
 		
 		
 		System.out.println(wallet.currentReceiveAddress().toBase58());
@@ -127,6 +135,7 @@ public class MainClass {
 			@Override
 			public void onBlocksDownloaded(Peer arg0, Block arg1,
 					@Nullable FilteredBlock arg2, int arg3) {
+				System.out.println("received block");
 				Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 				for(Transaction tx : assocTxs.values()) {
 					System.out.println(tx);
