@@ -2,23 +2,16 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import javax.annotation.Nullable;
-
-import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.BloomFilter;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.FilteredBlock;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
@@ -32,8 +25,8 @@ import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.core.Address;
-import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
-import org.bitcoinj.core.listeners.PeerDisconnectedEventListener;
+import org.bitcoinj.core.listeners.PeerConnectedEventListener;
+import edu.kit.tm.ptp.PTP;
 
 
 
@@ -51,7 +44,17 @@ public class MainClass {
 	public static void main(String[] args) {
 		//initialize neccessary bitcoinj variables
 		final NetworkParameters params = TestNet3Params.get();
+		ProofMessage pm = new ProofMessage();
 		
+		
+		PTP ptp = new PTP(System.getProperty("user.dir"));
+		try {
+			ptp.init();
+			ptp.createHiddenService();
+		} catch (IOException e3) {
+			// TODO Auto-generated catch block
+			e3.printStackTrace();
+		}
 		Wallet wallet = null;
 		File f = new File("./wallet.wa");
 		if(!f.exists()) {
@@ -71,9 +74,6 @@ public class MainClass {
 			}
 		}
 		File bs = new File("./blockstore.bc");
-		//TODO check if this does the job
-//		System.out.println("num of elem " + wallet.getBloomFilterElementCount());
-		//wallet.getBloomFilter(0).insert(BroadcastAnnouncement.magicNumber);
 		wallet.autosaveToFile(f, 2, TimeUnit.MINUTES, null);
 		SPVBlockStore spvbs = null;
 		BlockChain bc = null;
@@ -89,6 +89,8 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+		
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
 		System.setProperty("socksProxyHost", "127.0.0.1");
 		System.setProperty("socksProxyPort", "9050");
@@ -100,10 +102,23 @@ public class MainClass {
 		System.out.println("download chain");
 		pg.start();		
 		pg.downloadBlockChain();
+		
+		//insert into new peers the peer identifier into their bloomfilter,
+		//unfortunately it isn't possibly to insert it only a single time into the wallet
+		//but instead we update it in every peer
+		pg.addConnectedEventListener(new PeerConnectedEventListener() {
+			
+			@Override
+			public void onPeerConnected(Peer arg0, int arg1) {
+				arg0.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);				
+			}
+		});
+		for(Peer p : pg.getConnectedPeers()) {
+			p.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+		}
 		Peer downloadpeer = pg.getDownloadPeer();
-		BloomFilter bf = new BloomFilter(10, 0.005, 1);
-		bf.insert(BroadcastAnnouncement.magicNumber);
-		downloadpeer.setBloomFilter(bf);
+		downloadpeer.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+		assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		
 		
 		
@@ -127,25 +142,14 @@ public class MainClass {
 			e1.printStackTrace();
 		}
 		
-		//MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc);
+		MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc);
 		//bc.addNewBestBlockListener(mpd);
 		
-		pg.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
-			
-			@Override
-			public void onBlocksDownloaded(Peer arg0, Block arg1,
-					@Nullable FilteredBlock arg2, int arg3) {
-				System.out.println("received block");
-				Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
-				for(Transaction tx : assocTxs.values()) {
-					System.out.println(tx);
-				}
-				}
-		});
+		pg.addBlocksDownloadedEventListener(mpd);
 		
 		try {
 			System.out.println("sendBroadcastAnnouncement");
-			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement());
+			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10));
 		} catch (InsufficientMoneyException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -157,17 +161,31 @@ public class MainClass {
 //			// TODO Auto-generated catch block
 //			e.printStackTrace();
 //		}
-		
+		assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+
+		//sanity check, that the protocol identifier isn't overwritten by a new bloom filter etc
 		try {
-			TimeUnit.MINUTES.sleep(20);
+			for(int i=0; i<15;i++) {
+				assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+				TimeUnit.MINUTES.sleep(1);
+			}
+			
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+		Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
+		m .initiateMix();
+		
+		
 		pg.stop();
 	}
 	
-	private static void generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w) throws InsufficientMoneyException {
+	
+	//TODO refactor this out into an seperate class, and split into generating transaction
+	// and sending of the transaction
+	private static void generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm) throws InsufficientMoneyException {
 		Transaction tx = new Transaction(params);
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
@@ -213,6 +231,7 @@ public class MainClass {
 		}
 		
 		SendRequest req = SendRequest.forTx(tx);
+		pm.addTransaction(tx, 1);
 		req.changeAddress = changeAdrs;
 		req.shuffleOutputs = false;
 		req.signInputs = true;

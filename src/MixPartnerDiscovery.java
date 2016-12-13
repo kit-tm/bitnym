@@ -1,19 +1,26 @@
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ExecutionException;
+
+import javax.annotation.Nullable;
 
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
+import org.bitcoinj.core.FilteredBlock;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Block;
+import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
+import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.wallet.DefaultCoinSelector;
@@ -23,7 +30,7 @@ import org.bitcoinj.wallet.Wallet;
 import com.google.common.util.concurrent.ListenableFuture;
 
 
-public class MixPartnerDiscovery implements NewBestBlockListener {
+public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownloadedEventListener {
 	
 	PeerGroup pg;
 	BlockChain bc;
@@ -91,12 +98,13 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 	}
 	
 	
-	//put somewhere else, does not really fit into mixpartnerdiscovery
+	//put somewhere else, does not really fit into mixpartnerdiscovery?
 	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba) throws InsufficientMoneyException {
 		//build transaction
 		Transaction tx = new Transaction(params);
 		
 		Script s = ba.buildScript();
+		System.out.println("Script size is " + s.SIG_SIZE);
 		//System.out.println(s.getScriptType());
 		
 		tx.addOutput(Coin.ZERO, s);
@@ -138,5 +146,29 @@ public class MixPartnerDiscovery implements NewBestBlockListener {
 		System.out.println("searchCurrentBlockForPartners");
 		searchCurrentBlockForPartners();
 	}
+	
+	@Override
+	public void onBlocksDownloaded(Peer arg0, Block arg1,
+			@Nullable FilteredBlock arg2, int arg3) {
+		System.out.println("received block");
+		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
+		for(Transaction tx : assocTxs.values()) {
+			System.out.println(tx);
+			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(0).getScriptBytes())) {
+				this.broadcasts.add(tx);
+			}
+		}
+	}
+	
+	public BroadcastAnnouncement getMixpartner() {
+		int random;
+		Random r = new Random();
+		random = r.nextInt(broadcasts.size());
+		Transaction tx = broadcasts.get(random);
+		return BroadcastAnnouncement.deserialize(tx.getOutput(0).getScriptBytes());
+	}
+	
+	
+	
 	
 }
