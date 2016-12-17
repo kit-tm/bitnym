@@ -62,9 +62,9 @@ public class BroadcastAnnouncement {
 	}
 	
 	public static BroadcastAnnouncement deserialize(byte[] data) {
-		byte[] onionAdress = Arrays.copyOfRange(data, 7, 22);
-		byte[] mixValue = Arrays.copyOfRange(data, 22, 26);
-		byte[] acceptableLoss = Arrays.copyOfRange(data, 26, 30);
+		byte[] onionAdress = Arrays.copyOfRange(data, 7, 23);
+		byte[] mixValue = Arrays.copyOfRange(data, 23, 27);
+		byte[] acceptableLoss = Arrays.copyOfRange(data, 27, 31);
 		
 		return new BroadcastAnnouncement(new String(onionAdress), (new BigInteger(mixValue)).intValue(), (new BigInteger(mixValue)).intValue());
 	}

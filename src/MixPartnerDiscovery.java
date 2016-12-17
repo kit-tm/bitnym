@@ -37,11 +37,13 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	Block head;
 	List<Transaction> broadcasts;
 	//TODO add ring buffer data structure
+	private Wallet wallet;
 
-	public MixPartnerDiscovery(NetworkParameters params, PeerGroup pg, BlockChain bc) {
+	public MixPartnerDiscovery(NetworkParameters params, PeerGroup pg, BlockChain bc, Wallet wallet) {
 		this.pg = pg;
 		this.bc = bc;
 		this.head = null;
+		this.wallet = wallet;
 		this.broadcasts = new ArrayList<Transaction>();
 	}
 	
@@ -154,7 +156,8 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 		for(Transaction tx : assocTxs.values()) {
 			System.out.println(tx);
-			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(0).getScriptBytes())) {
+			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(0).getScriptBytes())
+					&& wallet.findKeyFromPubKey(tx.getInput(0).getScriptSig().getPubKey()) == null) {
 				this.broadcasts.add(tx);
 			}
 		}
@@ -163,6 +166,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	public BroadcastAnnouncement getMixpartner() {
 		int random;
 		Random r = new Random();
+		System.out.println(broadcasts.size());	
 		random = r.nextInt(broadcasts.size());
 		Transaction tx = broadcasts.get(random);
 		return BroadcastAnnouncement.deserialize(tx.getOutput(0).getScriptBytes());

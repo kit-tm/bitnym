@@ -1,34 +1,69 @@
-# Tor state file last generated on 2016-12-10 23:03:06 local time
+# Tor state file last generated on 2016-12-17 00:08:25 local time
 # Other times below are in UTC
 # You *do not* need to edit this file.
 
 EntryGuard Torstein 63C62B95F2B1E02A303326FE2C67880FF41F24F1 DirCache
 EntryGuardAddedBy 63C62B95F2B1E02A303326FE2C67880FF41F24F1 0.2.7.6 2016-11-18 11:09:23
-EntryGuardPathBias 124.000000 122.000000 122.000000 0.000000 0.000000 2.000000
-EntryGuardPathUseBias 54.000000 54.000000
+EntryGuardPathBias 277.304659 269.794832 268.793215 1.001618 0.000000 6.314609
+EntryGuardPathUseBias 93.000000 93.000000
 EntryGuard kerly 3BB035514F8246AC367B5370F4FE120BB11D8C6D DirCache
 EntryGuardAddedBy 3BB035514F8246AC367B5370F4FE120BB11D8C6D 0.2.7.6 2016-11-29 09:13:29
+EntryGuardPathBias 1.000000 1.000000 1.000000 0.000000 0.000000 0.000000
 EntryGuard 0x3d001 CFBBA0D858F02E40B1432A65F6D13C9BDFE7A46B DirCache
+EntryGuardUnlistedSince 2016-12-16 23:02:24
 EntryGuardAddedBy CFBBA0D858F02E40B1432A65F6D13C9BDFE7A46B 0.2.7.6 2016-11-21 09:48:33
 TorVersion Tor 0.2.7.6 (git-605ae665009853bd)
-LastWritten 2016-12-10 22:03:06
-TotalBuildTimes 104
-CircuitBuildTimeBin 175 1
-CircuitBuildTimeBin 225 12
-CircuitBuildTimeBin 275 10
-CircuitBuildTimeBin 325 17
-CircuitBuildTimeBin 375 14
-CircuitBuildTimeBin 425 11
-CircuitBuildTimeBin 475 4
-CircuitBuildTimeBin 525 10
-CircuitBuildTimeBin 575 4
-CircuitBuildTimeBin 625 5
-CircuitBuildTimeBin 675 3
-CircuitBuildTimeBin 725 2
-CircuitBuildTimeBin 775 3
+LastWritten 2016-12-16 23:08:25
+TotalBuildTimes 103
+CircuitBuildTimeBin 225 4
+CircuitBuildTimeBin 275 7
+CircuitBuildTimeBin 325 6
+CircuitBuildTimeBin 375 4
+CircuitBuildTimeBin 425 4
+CircuitBuildTimeBin 475 3
+CircuitBuildTimeBin 525 3
+CircuitBuildTimeBin 575 3
+CircuitBuildTimeBin 625 3
+CircuitBuildTimeBin 725 3
+CircuitBuildTimeBin 775 1
 CircuitBuildTimeBin 825 1
-CircuitBuildTimeBin 875 1
-CircuitBuildTimeBin 925 3
-CircuitBuildTimeBin 1175 1
-CircuitBuildTimeBin 1525 1
-CircuitBuildTimeBin 1675 1
+CircuitBuildTimeBin 1075 1
+CircuitBuildTimeBin 1325 1
+CircuitBuildTimeBin 2175 1
+CircuitBuildTimeBin 2225 1
+CircuitBuildTimeBin 2275 1
+CircuitBuildTimeBin 2325 3
+CircuitBuildTimeBin 2375 1
+CircuitBuildTimeBin 2475 1
+CircuitBuildTimeBin 2625 3
+CircuitBuildTimeBin 2675 2
+CircuitBuildTimeBin 2775 1
+CircuitBuildTimeBin 2825 2
+CircuitBuildTimeBin 2875 1
+CircuitBuildTimeBin 2975 1
+CircuitBuildTimeBin 3025 1
+CircuitBuildTimeBin 3075 1
+CircuitBuildTimeBin 3125 1
+CircuitBuildTimeBin 3175 2
+CircuitBuildTimeBin 3225 2
+CircuitBuildTimeBin 3275 2
+CircuitBuildTimeBin 3325 1
+CircuitBuildTimeBin 3375 2
+CircuitBuildTimeBin 3425 4
+CircuitBuildTimeBin 3475 1
+CircuitBuildTimeBin 3525 3
+CircuitBuildTimeBin 3575 1
+CircuitBuildTimeBin 3625 1
+CircuitBuildTimeBin 3675 1
+CircuitBuildTimeBin 3875 4
+CircuitBuildTimeBin 3925 1
+CircuitBuildTimeBin 3975 1
+CircuitBuildTimeBin 4075 1
+CircuitBuildTimeBin 4125 1
+CircuitBuildTimeBin 4175 2
+CircuitBuildTimeBin 4275 3
+CircuitBuildTimeBin 4325 1
+CircuitBuildTimeBin 4425 1
+CircuitBuildTimeBin 4475 1
+CircuitBuildTimeBin 16125 1
+CircuitBuildTimeBin 26975 1

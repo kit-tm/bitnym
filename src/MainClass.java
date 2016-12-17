@@ -1,11 +1,14 @@
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.bitcoinj.core.BlockChain;
+import org.bitcoinj.core.BloomFilter;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
@@ -13,6 +16,8 @@ import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Transaction;
+import org.bitcoinj.core.TransactionConfidence;
+import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.net.BlockingClientManager;
@@ -24,7 +29,9 @@ import org.bitcoinj.store.SPVBlockStore;
 import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
+import org.bitcoinj.wallet.Wallet.BalanceType;
 import org.bitcoinj.core.Address;
+import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.core.listeners.PeerConnectedEventListener;
 import edu.kit.tm.ptp.PTP;
 
@@ -37,14 +44,15 @@ public class MainClass {
 	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
 	private static Coin PSNYMVALUE = Coin.valueOf(200000);
 	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
+	public static NetworkParameters params;
 
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
 		//initialize neccessary bitcoinj variables
-		final NetworkParameters params = TestNet3Params.get();
-		ProofMessage pm = new ProofMessage();
+		MainClass.params = TestNet3Params.get();
+		final ProofMessage pm = new ProofMessage();
 		
 		
 		PTP ptp = new PTP(System.getProperty("user.dir"));
@@ -106,24 +114,31 @@ public class MainClass {
 		//insert into new peers the peer identifier into their bloomfilter,
 		//unfortunately it isn't possibly to insert it only a single time into the wallet
 		//but instead we update it in every peer
+		final BloomFilter filter = new BloomFilter(100, 0.05, 0);
+		filter.insert(BroadcastAnnouncement.magicNumber);
 		pg.addConnectedEventListener(new PeerConnectedEventListener() {
 			
 			@Override
 			public void onPeerConnected(Peer arg0, int arg1) {
-				arg0.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);				
+				arg0.setBloomFilter(filter);				
 			}
 		});
 		for(Peer p : pg.getConnectedPeers()) {
-			p.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+			p.setBloomFilter(filter);
 		}
 		Peer downloadpeer = pg.getDownloadPeer();
-		downloadpeer.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+		
+		
+		downloadpeer.setBloomFilter(filter);
+		//downloadpeer.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+		System.out.println("bloom filter assertion");
 		assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		
 		
-		
+		System.out.println("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
+		System.out.println("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
 		System.out.println(wallet.currentReceiveAddress().toBase58());
-		if(wallet.getBalance().isLessThan(totalOutput)) {
+		if(wallet.getBalance(BalanceType.ESTIMATED).isLessThan(totalOutput)) {
 			//use faucet to get some coins
 			try {
 				System.out.println("sleep for 10minutes");
@@ -134,7 +149,8 @@ public class MainClass {
 			}
 		}
 		
-		System.out.println("Current balance: " + wallet.getBalance().toFriendlyString());
+		
+		
 		try {
 			wallet.saveToFile(f);
 		} catch (IOException e1) {
@@ -142,7 +158,7 @@ public class MainClass {
 			e1.printStackTrace();
 		}
 		
-		MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc);
+		MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc, wallet);
 		//bc.addNewBestBlockListener(mpd);
 		
 		pg.addBlocksDownloadedEventListener(mpd);
@@ -154,20 +170,49 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
-//		try {
-//			generateGenesisTransaction(params, pg, wallet);
-//		} catch (InsufficientMoneyException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
+		try {
+			TimeUnit.MINUTES.sleep(15);
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		try {
+			Transaction genesisTx = generateGenesisTransaction(params, pg, wallet, pm);
+			genesisTx.getConfidence().addEventListener(new Listener() {
+				
+				@Override
+				public void onConfidenceChanged(TransactionConfidence arg0,
+						ChangeReason arg1) {
+					if (arg0.getConfidenceType() != TransactionConfidence.ConfidenceType.BUILDING) {
+						return;
+					}
+					if(arg0.getDepthInBlocks() == 3) {
+						//enough confidence, write proof message to the file system
+						FileOutputStream fout = new FileOutputStream(System.getProperty("user.dir") + "proofmessage.pm");
+						ObjectOutputStream oos = new ObjectOutputStream(fout);
+						oos.writeObject(pm);
+					}
+				}
+			});
+		} catch (InsufficientMoneyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		downloadpeer.setBloomFilter(filter);
+
 		assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 
 		//sanity check, that the protocol identifier isn't overwritten by a new bloom filter etc
 		try {
-			for(int i=0; i<15;i++) {
+			for(int i=0; i<25;i++) {
 				assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
-				TimeUnit.MINUTES.sleep(1);
+				if(mpd.broadcasts.size() == 0 || pm.getLastTransaction() == null) {
+					TimeUnit.MINUTES.sleep(1);
+				} else {
+					Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
+					m .initiateMix();
+					break;
+				}
 			}
 			
 		} catch (InterruptedException e) {
@@ -175,8 +220,7 @@ public class MainClass {
 			e.printStackTrace();
 		}
 		
-		Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
-		m .initiateMix();
+		
 		
 		
 		pg.stop();
@@ -185,7 +229,7 @@ public class MainClass {
 	
 	//TODO refactor this out into an seperate class, and split into generating transaction
 	// and sending of the transaction
-	private static void generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm) throws InsufficientMoneyException {
+	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm) throws InsufficientMoneyException {
 		Transaction tx = new Transaction(params);
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
@@ -222,6 +266,7 @@ public class MainClass {
 		//TODO add change, for know we add everything except PoB and fees to the psnym
 		ECKey changeKey = new ECKey();
 		Address changeAdrs = new Address(params, changeKey.getPubKeyHash());
+		w.importKey(changeKey);
 //		tx.addOutput(new TransactionOutput(params, tx, suffInptValue.minus(totalOutput), changeAdrs));	
 		try {
 			System.out.println("verify the transaction");
@@ -230,8 +275,10 @@ public class MainClass {
 			e.printStackTrace();
 		}
 		
-		SendRequest req = SendRequest.forTx(tx);
+		
+		
 		pm.addTransaction(tx, 1);
+		SendRequest req = SendRequest.forTx(tx);
 		req.changeAddress = changeAdrs;
 		req.shuffleOutputs = false;
 		req.signInputs = true;
@@ -245,6 +292,7 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		return tx;
 	}
 
 }

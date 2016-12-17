@@ -28,6 +28,8 @@ import org.bitcoinj.wallet.Wallet;
 import edu.kit.tm.ptp.Identifier;
 import edu.kit.tm.ptp.PTP;
 import edu.kit.tm.ptp.ReceiveListener;
+import edu.kit.tm.ptp.SendListener;
+import edu.kit.tm.ptp.SendListener.State;
 
 
 public class Mixer {
@@ -39,7 +41,14 @@ public class Mixer {
 	
 	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params) {
 		this.ptp = ptp;
-		this.mixPartnerAdress = new Identifier(bca.getOnionAdress());
+		this.mixPartnerAdress = new Identifier(bca.getOnionAdress() + ".onion");
+		this.ownProof = pm;
+		this.w = w;
+		this.params = params;
+	}
+	
+	public Mixer(PTP ptp, ProofMessage pm, Wallet w, NetworkParameters params) {
+		this.ptp = ptp;
 		this.ownProof = pm;
 		this.w = w;
 		this.params = params;
@@ -102,10 +111,28 @@ public class Mixer {
 	
 	public void initiateMix() {
 		
+		ptp.setSendListener(new SendListener() {
+
+	        @Override
+	        public void messageSent(long id, Identifier destination, State state) {
+	          switch (state) {
+	            case INVALID_DESTINATION:
+	              System.out.println("Destination " + destination + " is invalid");
+	              break;
+	            case TIMEOUT:
+	              System.out.println("Sending of message timed out");
+	              break;
+	            default:
+	              break;
+	          }
+	        }
+	      });
+		
 		
 		//handshake?
 		
 		//exchange proofs
+		System.out.println("initiateMix");
 		if(this.mixPartnerAdress == null) {
 			System.out.println("No mix partner");
 		}
@@ -114,6 +141,7 @@ public class Mixer {
 		
 		pmBytes = serialize(this.ownProof); 
 		
+		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
 		this.ptp.sendMessage(pmBytes, mixPartnerAdress);
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
