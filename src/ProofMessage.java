@@ -1,7 +1,9 @@
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +23,26 @@ public class ProofMessage implements Serializable {
 	 */
 	private static final long serialVersionUID = 1L;
 	private List<Transaction> validationPath;
+	public void setValidationPath(List<Transaction> validationPath) {
+		this.validationPath = validationPath;
+	}
+
+	public void setOutputIndices(List<Integer> outputIndices) {
+		this.outputIndices = outputIndices;
+	}
+
+	public static long getSerialversionuid() {
+		return serialVersionUID;
+	}
+
+	public List<Transaction> getValidationPath() {
+		return validationPath;
+	}
+
+	public List<Integer> getOutputIndices() {
+		return outputIndices;
+	}
+
 	private List<Integer> outputIndices;
 	
 	public ProofMessage() {
@@ -83,44 +105,81 @@ public class ProofMessage implements Serializable {
 	
 	private void writeObject(ObjectOutputStream oos)
 			throws IOException {
-			    List<byte[]> txs = new ArrayList<byte[]>();
-			    for(Transaction tx : this.validationPath) {
-			    	txs.add(tx.bitcoinSerialize());
-			    }
-			    oos.writeObject(txs);
-			    for(Integer i : this.outputIndices) {
-			    	oos.writeInt(i);
-			    }
+			    //List<byte[]> txs = new ArrayList<byte[]>();
+			    //List<Integer> intList = new ArrayList<Integer>();
+		for(Integer i : this.outputIndices) {
+			oos.writeObject(i);
+		}
+		for(Transaction tx : this.validationPath) {
+			oos.writeObject(tx.bitcoinSerialize());
+		}
+
 	}
 
 	private void readObject(ObjectInputStream ois)
 			throws ClassNotFoundException, IOException {
-			    List<Object> loc = (List<Object>)ois.readObject();
-			    List vPath, oIndices;
-			    List<Transaction> txList = new ArrayList<Transaction>();
-			    List<Integer> intList = new ArrayList<Integer>();
-			    vPath = loc.subList(0, loc.size()/2);
-			    oIndices = loc.subList(loc.size()/2, loc.size());
-			    BitcoinSerializer bs = new BitcoinSerializer(MainClass.params, false);
-			    for(Object i : vPath) {
-			    	ByteBuffer bb = ByteBuffer.wrap((byte[]) i);
-					Transaction rcvdTx = null;
-					try {
-						rcvdTx = (Transaction) bs.deserialize(bb);
-						txList.add(rcvdTx);
-					} catch (ProtocolException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-			    }
-			    for(Object i : oIndices) {
-			    	intList.add((Integer) i);
-			    }
-			    validationPath = txList;
-			    outputIndices = intList;
+
+		List vPath, oIndices;
+		List<Transaction> txList = new ArrayList<Transaction>();
+		List<Integer> intList = new ArrayList<Integer>();
+		List<Object> l = new ArrayList<Object>();
+		BitcoinSerializer bs = new BitcoinSerializer(MainClass.params, false);
+		try {
+			for (;;)
+			{
+				Object o = ois.readObject();
+				l.add(o);
+			}
+		} catch (SocketTimeoutException exc) {
+		    // you got the timeout
+		} catch (EOFException exc) {
+		    // end of stream
+		} catch (IOException exc) {
+		    // some other I/O error: print it, log it, etc.
+		    //exc.printStackTrace(); // for example
+		}
+
+		oIndices = l.subList(0, l.size()/2);
+		System.out.println(l.size());
+		vPath = l.subList(l.size()/2, l.size());
+
+		for(Object i : oIndices) {
+			intList.add((Integer) i);
+		}
+		for(Object o : vPath) {
+			Transaction rcvdTx = null;
+			try {
+				rcvdTx = bs.makeTransaction((byte[]) o);
+				//rcvdTx = (Transaction) bs.deserialize(bb);
+				txList.add(rcvdTx);
+			} catch (ProtocolException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} //catch (IOException e) {
+				// TODO Auto-generated catch block
+			//	e.printStackTrace();
+			//}
+		}
+
+		validationPath = txList;
+		outputIndices = intList;
+	}
+
+	public boolean isEmpty() {
+		return this.validationPath.size() == 0;
+		
+	}
+	
+	@Override
+	public String toString() {
+		String retValue = null;
+		StringBuilder sb = new StringBuilder();
+		for(Transaction tx : this.validationPath) {
+			sb.append(tx.toString());
+			sb.append("----------\n");
+		}
+		retValue = sb.toString();
+		return retValue;
 	}
 
 }

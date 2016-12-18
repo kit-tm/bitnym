@@ -1,4 +1,6 @@
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -101,7 +103,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	
 	
 	//put somewhere else, does not really fit into mixpartnerdiscovery?
-	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba) throws InsufficientMoneyException {
+	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba, File f) throws InsufficientMoneyException {
 		//build transaction
 		Transaction tx = new Transaction(params);
 		
@@ -116,7 +118,12 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		req.signInputs = true;
 		req.shuffleOutputs = false;
 		Wallet.SendResult result = w.sendCoins(req);
-		
+		try {
+			w.saveToFile(f);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
 		try {
 			result.broadcastComplete.get();
 		} catch (InterruptedException e) {
@@ -170,6 +177,10 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		random = r.nextInt(broadcasts.size());
 		Transaction tx = broadcasts.get(random);
 		return BroadcastAnnouncement.deserialize(tx.getOutput(0).getScriptBytes());
+	}
+
+	public boolean hasBroadcasts() {
+		return this.broadcasts.size() > 0;
 	}
 	
 	

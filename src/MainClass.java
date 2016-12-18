@@ -1,6 +1,11 @@
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.Iterator;
 import java.util.List;
@@ -52,9 +57,35 @@ public class MainClass {
 	public static void main(String[] args) {
 		//initialize neccessary bitcoinj variables
 		MainClass.params = TestNet3Params.get();
+		
 		final ProofMessage pm = new ProofMessage();
-		
-		
+		ProofMessage pm2 = null;
+		try {
+			File file = new File(System.getProperty("user.dir") + "/proofmessage.pm");
+			if(file.exists()) {  
+			   FileInputStream fin = new FileInputStream(file);
+			   ObjectInputStream ois = new ObjectInputStream(fin);
+			   pm2 = (ProofMessage) ois.readObject();
+			   ois.close();
+			   fin.close();
+			}
+			
+		} catch (FileNotFoundException e4) {
+			// TODO Auto-generated catch block
+			e4.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		//shallow copy from pm2 to pm, this is necessary because of final modifier
+		if(pm2 != null) {
+			pm.setOutputIndices(pm2.getOutputIndices());
+			pm.setValidationPath(pm2.getValidationPath());
+		}
 		PTP ptp = new PTP(System.getProperty("user.dir"));
 		try {
 			ptp.init();
@@ -82,7 +113,7 @@ public class MainClass {
 			}
 		}
 		File bs = new File("./blockstore.bc");
-		wallet.autosaveToFile(f, 2, TimeUnit.MINUTES, null);
+		wallet.autosaveToFile(f, 30, TimeUnit.SECONDS, null);
 		SPVBlockStore spvbs = null;
 		BlockChain bc = null;
 		try {
@@ -98,11 +129,12 @@ public class MainClass {
 			e.printStackTrace();
 		}
 		
-		
+		System.out.println(pm);
+
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
 		System.setProperty("socksProxyHost", "127.0.0.1");
 		System.setProperty("socksProxyPort", "9050");
-		PeerGroup pg = new PeerGroup(params, bc, new BlockingClientManager());
+		final PeerGroup pg = new PeerGroup(params, bc, new BlockingClientManager());
 		pg.addWallet(wallet);
 		
 		//TODO DNS through Tor without Orchid, as it is not maintained
@@ -114,31 +146,37 @@ public class MainClass {
 		//insert into new peers the peer identifier into their bloomfilter,
 		//unfortunately it isn't possibly to insert it only a single time into the wallet
 		//but instead we update it in every peer
-		final BloomFilter filter = new BloomFilter(100, 0.05, 0);
-		filter.insert(BroadcastAnnouncement.magicNumber);
-		pg.addConnectedEventListener(new PeerConnectedEventListener() {
-			
-			@Override
-			public void onPeerConnected(Peer arg0, int arg1) {
-				arg0.setBloomFilter(filter);				
-			}
-		});
-		for(Peer p : pg.getConnectedPeers()) {
-			p.setBloomFilter(filter);
-		}
-		Peer downloadpeer = pg.getDownloadPeer();
+//		final BloomFilter filter = new BloomFilter(100, 0.05, 0);
+//		filter.insert(BroadcastAnnouncement.magicNumber);
+//		pg.addConnectedEventListener(new PeerConnectedEventListener() {
+//			
+//			@Override
+//			public void onPeerConnected(Peer arg0, int arg1) {
+//				arg0.setBloomFilter(filter);				
+//			}
+//		});
+//		for(Peer p : pg.getConnectedPeers()) {
+//			p.setBloomFilter(filter);
+//		}
+		//Peer downloadpeer = pg.getDownloadPeer();
 		
 		
-		downloadpeer.setBloomFilter(filter);
+		//downloadpeer.setBloomFilter(filter);
 		//downloadpeer.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+		javax.swing.Timer t = new javax.swing.Timer( 1000*10, new ActionListener() {
+			  public void actionPerformed( ActionEvent e ) {
+			    pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+			  }
+			});
+		t.start();
 		System.out.println("bloom filter assertion");
-		assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+		//assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		
 		
 		System.out.println("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
 		System.out.println("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
 		System.out.println(wallet.currentReceiveAddress().toBase58());
-		if(wallet.getBalance(BalanceType.ESTIMATED).isLessThan(totalOutput)) {
+		if(wallet.getBalance(BalanceType.AVAILABLE).isLessThan(totalOutput)) {
 			//use faucet to get some coins
 			try {
 				System.out.println("sleep for 10minutes");
@@ -148,7 +186,8 @@ public class MainClass {
 				e2.printStackTrace();
 			}
 		}
-		
+		System.out.println("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
+
 		
 		
 		try {
@@ -162,55 +201,74 @@ public class MainClass {
 		//bc.addNewBestBlockListener(mpd);
 		
 		pg.addBlocksDownloadedEventListener(mpd);
+		System.out.println("addblocksdownloadedeventlistener");
 		
 		try {
 			System.out.println("sendBroadcastAnnouncement");
-			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10));
+			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f);
 		} catch (InsufficientMoneyException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+//		try {
+//			TimeUnit.MINUTES.sleep(15);
+//		} catch (InterruptedException e1) {
+//			// TODO Auto-generated catch block
+//			e1.printStackTrace();
+//		}
 		try {
-			TimeUnit.MINUTES.sleep(15);
-		} catch (InterruptedException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
-		try {
-			Transaction genesisTx = generateGenesisTransaction(params, pg, wallet, pm);
-			genesisTx.getConfidence().addEventListener(new Listener() {
-				
-				@Override
-				public void onConfidenceChanged(TransactionConfidence arg0,
-						ChangeReason arg1) {
-					if (arg0.getConfidenceType() != TransactionConfidence.ConfidenceType.BUILDING) {
-						return;
-					}
-					if(arg0.getDepthInBlocks() == 3) {
-						//enough confidence, write proof message to the file system
-						FileOutputStream fout = new FileOutputStream(System.getProperty("user.dir") + "proofmessage.pm");
-						ObjectOutputStream oos = new ObjectOutputStream(fout);
-						oos.writeObject(pm);
-					}
-				}
-			});
-		} catch (InsufficientMoneyException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		downloadpeer.setBloomFilter(filter);
+			//generate genesis transaction if we proof is empty
+			if(pm.getValidationPath().size() == 0) {
+				Transaction genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f);
+				System.out.println("genereated genesis tx");
+				genesisTx.getConfidence().addEventListener(new Listener() {
 
-		assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+					@Override
+					public void onConfidenceChanged(TransactionConfidence arg0,
+							ChangeReason arg1) {
+						if (arg0.getConfidenceType() != TransactionConfidence.ConfidenceType.BUILDING) {
+							return;
+						}
+						if(arg0.getDepthInBlocks() == 1) {
+							//enough confidence, write proof message to the file system
+							try {
+								File file = new File(System.getProperty("user.dir") + "/proofmessage.pm");
+								if(!file.exists()) {
+									file.createNewFile();
+								}
+								FileOutputStream fout = new FileOutputStream(file);
+								ObjectOutputStream oos = new ObjectOutputStream(fout);
+								oos.writeObject(pm);
+								oos.close();
+								fout.close();
+								System.out.println("saved proof message to file ");
+							} catch (FileNotFoundException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							} catch (IOException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
+						}
+					}
+				});
+			}
+		} catch (InsufficientMoneyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		//assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 
 		//sanity check, that the protocol identifier isn't overwritten by a new bloom filter etc
 		try {
-			for(int i=0; i<25;i++) {
-				assert(downloadpeer.getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
-				if(mpd.broadcasts.size() == 0 || pm.getLastTransaction() == null) {
+			for(int i=0; i<50;i++) {
+		//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+				if(!mpd.hasBroadcasts() || pm.isEmpty()) {
 					TimeUnit.MINUTES.sleep(1);
 				} else {
 					Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
-					m .initiateMix();
+					m.initiateMix();
 					break;
 				}
 			}
@@ -222,14 +280,14 @@ public class MainClass {
 		
 		
 		
-		
+		ptp.exit();
 		pg.stop();
 	}
 	
 	
 	//TODO refactor this out into an seperate class, and split into generating transaction
 	// and sending of the transaction
-	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm) throws InsufficientMoneyException {
+	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm, File f) throws InsufficientMoneyException {
 		Transaction tx = new Transaction(params);
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
@@ -283,6 +341,12 @@ public class MainClass {
 		req.shuffleOutputs = false;
 		req.signInputs = true;
 		Wallet.SendResult result = w.sendCoins(req);
+		try {
+			w.saveToFile(f);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
 		try {
 			result.broadcastComplete.get();
 		} catch (InterruptedException e) {
