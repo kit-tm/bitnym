@@ -1,10 +1,12 @@
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.Iterator;
@@ -90,6 +92,7 @@ public class MainClass {
 		try {
 			ptp.init();
 			ptp.createHiddenService();
+			ptp.getIdentifier().getTorAddress();
 		} catch (IOException e3) {
 			// TODO Auto-generated catch block
 			e3.printStackTrace();
@@ -130,7 +133,6 @@ public class MainClass {
 		}
 		
 		System.out.println(pm);
-
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
 		System.setProperty("socksProxyHost", "127.0.0.1");
 		System.setProperty("socksProxyPort", "9050");
@@ -146,31 +148,34 @@ public class MainClass {
 		//insert into new peers the peer identifier into their bloomfilter,
 		//unfortunately it isn't possibly to insert it only a single time into the wallet
 		//but instead we update it in every peer
-//		final BloomFilter filter = new BloomFilter(100, 0.05, 0);
-//		filter.insert(BroadcastAnnouncement.magicNumber);
-//		pg.addConnectedEventListener(new PeerConnectedEventListener() {
-//			
-//			@Override
-//			public void onPeerConnected(Peer arg0, int arg1) {
-//				arg0.setBloomFilter(filter);				
-//			}
-//		});
-//		for(Peer p : pg.getConnectedPeers()) {
-//			p.setBloomFilter(filter);
-//		}
+		//final BloomFilter filter = new BloomFilter(100, 0.05, 0);
+		//filter.insert(BroadcastAnnouncement.magicNumber);
+		pg.addConnectedEventListener(new PeerConnectedEventListener() {
+			
+			@Override
+			public void onPeerConnected(Peer arg0, int arg1) {
+				arg0.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);			
+			}
+		});
+		for(Peer p : pg.getConnectedPeers()) {
+			p.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+		}
 		//Peer downloadpeer = pg.getDownloadPeer();
 		
 		
 		//downloadpeer.setBloomFilter(filter);
 		//downloadpeer.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
-		javax.swing.Timer t = new javax.swing.Timer( 1000*10, new ActionListener() {
+		javax.swing.Timer t = new javax.swing.Timer( 1000, new ActionListener() {
 			  public void actionPerformed( ActionEvent e ) {
 			    pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+			    //pg.getDownloadPeer().setBloomFilter(filter);
 			  }
 			});
 		t.start();
 		System.out.println("bloom filter assertion");
-		//assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+	    //pg.getDownloadPeer().setBloomFilter(filter);
+	    pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		
 		
 		System.out.println("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
@@ -203,13 +208,13 @@ public class MainClass {
 		pg.addBlocksDownloadedEventListener(mpd);
 		System.out.println("addblocksdownloadedeventlistener");
 		
-		try {
-			System.out.println("sendBroadcastAnnouncement");
-			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f);
-		} catch (InsufficientMoneyException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+//		try {
+//			System.out.println("sendBroadcastAnnouncement");
+//			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm);
+//		} catch (InsufficientMoneyException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 //		try {
 //			TimeUnit.MINUTES.sleep(15);
 //		} catch (InterruptedException e1) {
@@ -221,6 +226,7 @@ public class MainClass {
 			if(pm.getValidationPath().size() == 0) {
 				Transaction genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f);
 				System.out.println("genereated genesis tx");
+				//TODO register listener before sending tx out, to avoid missing a confidence change
 				genesisTx.getConfidence().addEventListener(new Listener() {
 
 					@Override
@@ -264,10 +270,23 @@ public class MainClass {
 		try {
 			for(int i=0; i<50;i++) {
 		//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
-				if(!mpd.hasBroadcasts() || pm.isEmpty()) {
+				//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
+				if(pm.isEmpty()) {	
 					TimeUnit.MINUTES.sleep(1);
 				} else {
-					Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
+					BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+					// Ask for the destination hidden service identifier
+				    System.out.println("Enter destination identifier: ");
+				    String destinationAddress = null;
+				    try {
+						destinationAddress = br.readLine();
+					} catch (IOException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+					//Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
+					Mixer m = new Mixer(ptp, destinationAddress, pm, wallet, params);
+
 					m.initiateMix();
 					break;
 				}
@@ -277,7 +296,12 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
+		try {
+			TimeUnit.MINUTES.sleep(5);
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
 		
 		
 		ptp.exit();
@@ -335,7 +359,6 @@ public class MainClass {
 		
 		
 		
-		pm.addTransaction(tx, 1);
 		SendRequest req = SendRequest.forTx(tx);
 		req.changeAddress = changeAdrs;
 		req.shuffleOutputs = false;
@@ -349,6 +372,7 @@ public class MainClass {
 		}
 		try {
 			result.broadcastComplete.get();
+			pm.addTransaction(result.tx, 1);
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

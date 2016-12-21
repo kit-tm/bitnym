@@ -7,9 +7,11 @@ import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.BitcoinSerializer;
@@ -22,6 +24,9 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.Script.VerifyFlag;
+import org.bitcoinj.script.ScriptBuilder;
+import org.bitcoinj.wallet.CoinSelection;
+import org.bitcoinj.wallet.CoinSelector;
 import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 
@@ -47,6 +52,14 @@ public class Mixer {
 		this.params = params;
 	}
 	
+	public Mixer(PTP ptp, String onionAddress, ProofMessage pm, Wallet w, NetworkParameters params) {
+		this.ptp = ptp;
+		this.mixPartnerAdress = new Identifier(onionAddress);
+		this.ownProof = pm;
+		this.w = w;
+		this.params = params;
+	}
+	
 	public Mixer(PTP ptp, ProofMessage pm, Wallet w, NetworkParameters params) {
 		this.ptp = ptp;
 		this.ownProof = pm;
@@ -55,55 +68,80 @@ public class Mixer {
 	}
 	
 	public void passiveMix(byte[] arg0) {
+		ptp.setSendListener(new SendListener() {
+
+	        @Override
+	        public void messageSent(long id, Identifier destination, State state) {
+	          switch (state) {
+	            case INVALID_DESTINATION:
+	              System.out.println("Destination " + destination + " is invalid");
+	              break;
+	            case TIMEOUT:
+	              System.out.println("Sending of message timed out");
+	              break;
+	            default:
+	            	System.out.println("Send successful");
+	              break;
+	          }
+	        }
+	      });
 		//received serialized proof, so deserialize, and check proof
+		System.out.println("check partner proof");
 		this.partnerProof = (ProofMessage) deserialize(arg0);
 		if(!partnerProof.isValidProof()) {
 			System.out.println("proof of mix partner is invalid");
 			return;
 		}
 		//send own proof to partner
-		this.ptp.sendMessage(serialize(ownProof), mixPartnerAdress);
 		this.ptp.setReceiveListener(new ReceiveListener() {
-			
+
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
 				// TODO Auto-generated method stub
 				//deserialize received tx, and add own input and output and
 				//sign then and send back
+				System.out.println("try to deserialize tx received from mixpartner");
 				BitcoinSerializer bs = new BitcoinSerializer(params, false);
 				ByteBuffer bb = ByteBuffer.wrap(arg0);
 				Transaction rcvdTx = null;
 				try {
-					rcvdTx = (Transaction) bs.deserialize(bb);
+					rcvdTx = bs.makeTransaction(arg0);
+					System.out.println("deserialized tx received from mixpartner");
 				} catch (ProtocolException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
 				}
-				
+
 				//check that tx input references the psynym in the proof
 				Set<Script.VerifyFlag> s = new HashSet<Script.VerifyFlag>();
-				rcvdTx.getInput(0).getScriptSig().correctlySpends(rcvdTx, 0, partnerProof.getLastTransactionOutput().getScriptPubKey(),s);
-				
+				//rcvdTx.getInput(0).getScriptSig().correctlySpends(rcvdTx, 0, partnerProof.getLastTransactionOutput().getScriptPubKey(),s);
+
 				//check output value
 				if(rcvdTx.getOutputs().size() == 0) {
-					
+
 				} else if(rcvdTx.getOutputs().size() == 1) {
+					System.out.println("partner added first output to the tx");
 					//partner added already his output					
 					ECKey psnymKey = new ECKey();
 					Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
 					w.importKey(psnymKey);
-					TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, Coin.ZERO, nymAdrs);
+					TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, Coin.valueOf(150000), nymAdrs);
 					rcvdTx.addOutput(newPsyNym);
 					//sign input and send back for signing
 					rcvdTx.addSignedInput(ownProof.getLastTransactionOutput(), psnymKey);
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
 				}
-				
+
 			}
 		});
+		this.ptp.sendMessage(serialize(ownProof), mixPartnerAdress);
+		try {
+			TimeUnit.MINUTES.sleep(2);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 		
 		
 	}
@@ -123,6 +161,7 @@ public class Mixer {
 	              System.out.println("Sending of message timed out");
 	              break;
 	            default:
+	            	System.out.println("Send successful");
 	              break;
 	          }
 	        }
@@ -137,12 +176,11 @@ public class Mixer {
 			System.out.println("No mix partner");
 		}
 		
-		byte[] pmBytes = null;
+		byte[] serializedProof = null;
 		
-		pmBytes = serialize(this.ownProof); 
+		serializedProof = serialize(this.ownProof);
 		
 		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
-		this.ptp.sendMessage(pmBytes, mixPartnerAdress);
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			//deserialize proof
@@ -150,6 +188,7 @@ public class Mixer {
 			public void messageReceived(byte[] arg0, Identifier arg1) {
 				partnerProof = (ProofMessage) deserialize(arg0);
 				//check proof
+				System.out.println("check partner proof");
 				if(!partnerProof.isValidProof()) {
 					System.out.println("proof of mix partner is invalid");
 					return;
@@ -158,6 +197,13 @@ public class Mixer {
 				
 			}
 		});
+		this.ptp.sendMessage(serializedProof, mixPartnerAdress);
+		try {
+			TimeUnit.MINUTES.sleep(2);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
 	}
 
@@ -239,17 +285,20 @@ public class Mixer {
 	
 	private void mixAndConstructNewProof() {
 		//mix
+		System.out.println("try to mix and construct new proof");
 				final Transaction mixTx = new Transaction(params);
 				mixTx.addInput(this.ownProof.getLastTransactionOutput());
 				// draw random value for decision of output order
 				// security of randomness? probably not a big thing
 				Random r = new Random();
 				int outputOrder = r.nextInt(2);
+				outputOrder = 0;
 				//set the value later on
 				ECKey psnymKey = new ECKey();
 				Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
 				w.importKey(psnymKey);
-				TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, Coin.ZERO, nymAdrs);
+				//TODO compute the right value as (input1 + input2 - fee)/2
+				TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, Coin.valueOf(150000), nymAdrs);
 				byte[] serializedTx;
 				if(outputOrder == 0) {
 					//add the own output and send the unfinished tx to the mix partner
@@ -257,7 +306,7 @@ public class Mixer {
 					//after checking correctness
 					mixTx.addOutput(newPsyNym);
 					serializedTx = mixTx.bitcoinSerialize();
-					this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
+
 					//check tx, sign it, then send it out to the bitcoin network
 					this.ptp.setReceiveListener(new ReceiveListener() {
 						
@@ -267,20 +316,32 @@ public class Mixer {
 							ByteBuffer bb = ByteBuffer.wrap(arg0);
 							Transaction rcvdTx = null;
 							try {
-								rcvdTx = (Transaction) bs.deserialize(bb);
+								rcvdTx = bs.makeTransaction(arg0);
+								//rcvdTx = (Transaction) bs.deserialize(bb);
 							} catch (ProtocolException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							} catch (IOException e) {
 								// TODO Auto-generated catch block
 								e.printStackTrace();
 							}
 							checkTx(mixTx, rcvdTx, partnerProof);
 							//sign transaction and send it to the network
+							//get the signing key from wallet
+							byte[] pubkeyHash = ownProof.getLastTransactionOutput().getScriptPubKey().getPubKeyHash();
+							ECKey k = w.findKeyFromPubHash(pubkeyHash);
+							rcvdTx.getInput(0).setScriptSig((ScriptBuilder.createInputScript(rcvdTx.calculateSignature(0, k, ownProof.getLastTransactionOutput().getScriptPubKey(), Transaction.SigHash.ALL, false))));							
 							rcvdTx.verify();
 							SendRequest req = SendRequest.forTx(rcvdTx);
 							req.shuffleOutputs = false;
-							req.signInputs = true;
+							req.signInputs = false;
+							req.changeAddress = null;
+							req.ensureMinRequiredFee = false;
+							req.coinSelector = new CoinSelector() {
+								
+								@Override
+								public CoinSelection select(Coin arg0, List<TransactionOutput> arg1) {
+									// TODO Auto-generated method stub
+									return null;
+								}
+							};
 							Wallet.SendResult result = null;
 							try {
 								result = w.sendCoins(req);
@@ -299,9 +360,17 @@ public class Mixer {
 								e.printStackTrace();
 							}
 						}
-
-
 					});
+					this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
+					try {
+						TimeUnit.MINUTES.sleep(2);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+
+
+					
 				} else {
 					//let the mixpartner add his output first and partners input
 					//we will add then our output and sign the tx, send it to the partner

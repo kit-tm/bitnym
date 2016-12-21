@@ -103,7 +103,9 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	
 	
 	//put somewhere else, does not really fit into mixpartnerdiscovery?
-	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba, File f) throws InsufficientMoneyException {
+	//TODO use only valid pseudonyms (through coin selector for example) to prevent deanonymization
+	//as an input
+	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba, File f, ProofMessage pm) throws InsufficientMoneyException {
 		//build transaction
 		Transaction tx = new Transaction(params);
 		
@@ -126,6 +128,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		}
 		try {
 			result.broadcastComplete.get();
+			pm.addTransaction(result.tx, 1);
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

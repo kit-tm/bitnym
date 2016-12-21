@@ -140,7 +140,6 @@ public class ProofMessage implements Serializable {
 		}
 
 		oIndices = l.subList(0, l.size()/2);
-		System.out.println(l.size());
 		vPath = l.subList(l.size()/2, l.size());
 
 		for(Object i : oIndices) {
