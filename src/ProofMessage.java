@@ -47,6 +47,8 @@ public class ProofMessage implements Serializable {
 	
 	public ProofMessage() {
 		this.validationPath = new ArrayList<Transaction>();
+		
+		//determines the corresponding output within the the mix txs
 		this.outputIndices = new ArrayList<Integer>();
 	}
 	

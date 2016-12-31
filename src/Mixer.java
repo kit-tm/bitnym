@@ -19,6 +19,7 @@ import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.ProtocolException;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
@@ -43,23 +44,30 @@ public class Mixer {
 	private ProofMessage ownProof, partnerProof;
 	private Wallet w;
 	private NetworkParameters params;
+	private PeerGroup pg;
 	
-	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params) {
+	//get the onion mix adress from a broadcastannouncement
+	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg) {
 		this.ptp = ptp;
 		this.mixPartnerAdress = new Identifier(bca.getOnionAdress() + ".onion");
 		this.ownProof = pm;
 		this.w = w;
 		this.params = params;
+		this.pg = pg;
 	}
 	
-	public Mixer(PTP ptp, String onionAddress, ProofMessage pm, Wallet w, NetworkParameters params) {
+	
+	//get onionAdress directly
+	public Mixer(PTP ptp, String onionAddress, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg) {
 		this.ptp = ptp;
 		this.mixPartnerAdress = new Identifier(onionAddress);
 		this.ownProof = pm;
 		this.w = w;
 		this.params = params;
+		this.pg = pg;
 	}
 	
+	//constructor for just listening
 	public Mixer(PTP ptp, ProofMessage pm, Wallet w, NetworkParameters params) {
 		this.ptp = ptp;
 		this.ownProof = pm;
@@ -122,13 +130,16 @@ public class Mixer {
 				} else if(rcvdTx.getOutputs().size() == 1) {
 					System.out.println("partner added first output to the tx");
 					//partner added already his output					
-					ECKey psnymKey = new ECKey();
-					Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
-					w.importKey(psnymKey);
+					ECKey newPsnymKey = new ECKey();
+					Address nymAdrs = new Address(params, newPsnymKey.getPubKeyHash());
+					w.importKey(newPsnymKey);
 					TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, Coin.valueOf(150000), nymAdrs);
 					rcvdTx.addOutput(newPsyNym);
 					//sign input and send back for signing
-					rcvdTx.addSignedInput(ownProof.getLastTransactionOutput(), psnymKey);
+					byte[] pubkeyHash = ownProof.getLastTransactionOutput().getScriptPubKey().getPubKeyHash();
+					ECKey k = w.findKeyFromPubHash(pubkeyHash);
+					rcvdTx.addSignedInput(ownProof.getLastTransactionOutput(), k);
+					rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
 				}
 
@@ -327,38 +338,44 @@ public class Mixer {
 							//get the signing key from wallet
 							byte[] pubkeyHash = ownProof.getLastTransactionOutput().getScriptPubKey().getPubKeyHash();
 							ECKey k = w.findKeyFromPubHash(pubkeyHash);
-							rcvdTx.getInput(0).setScriptSig((ScriptBuilder.createInputScript(rcvdTx.calculateSignature(0, k, ownProof.getLastTransactionOutput().getScriptPubKey(), Transaction.SigHash.ALL, false))));							
+							rcvdTx.getInput(0).setScriptSig((ScriptBuilder.createInputScript(rcvdTx.calculateSignature(0, k, ownProof.getLastTransactionOutput().getScriptPubKey(), Transaction.SigHash.ALL, false), k)));							
+							
+							//this method just does rudimentary checks, does not check whether inputs are already spent for example
 							rcvdTx.verify();
-							SendRequest req = SendRequest.forTx(rcvdTx);
-							req.shuffleOutputs = false;
-							req.signInputs = false;
-							req.changeAddress = null;
-							req.ensureMinRequiredFee = false;
-							req.coinSelector = new CoinSelector() {
-								
-								@Override
-								public CoinSelection select(Coin arg0, List<TransactionOutput> arg1) {
-									// TODO Auto-generated method stub
-									return null;
-								}
-							};
-							Wallet.SendResult result = null;
-							try {
-								result = w.sendCoins(req);
-							} catch (InsufficientMoneyException e1) {
-								// TODO Auto-generated catch block
-								e1.printStackTrace();
-							}
-
-							try {
-								result.broadcastComplete.get();
-							} catch (InterruptedException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							} catch (ExecutionException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
+//							SendRequest req = SendRequest.forTx(rcvdTx);
+//							req.shuffleOutputs = false;
+//							req.signInputs = false;
+//							req.changeAddress = null;
+//							req.ensureMinRequiredFee = false;
+//							req.coinSelector = new CoinSelector() {
+//								
+//								@Override
+//								public CoinSelection select(Coin arg0, List<TransactionOutput> arg1) {
+//									// TODO Auto-generated method stub
+//									return null;
+//								}
+//							};
+//							Wallet.SendResult result = null;
+							System.out.println(rcvdTx);
+							System.out.println(ownProof.getLastTransactionOutput());
+							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+							pg.broadcastTransaction(rcvdTx);
+//							try {
+//								result = w.sendCoins(req);
+//							} catch (InsufficientMoneyException e1) {
+//								// TODO Auto-generated catch block
+//								e1.printStackTrace();
+//							}
+//
+//							try {
+//								result.broadcastComplete.get();
+//							} catch (InterruptedException e) {
+//								// TODO Auto-generated catch block
+//								e.printStackTrace();
+//							} catch (ExecutionException e) {
+//								// TODO Auto-generated catch block
+//								e.printStackTrace();
+//							}
 						}
 					});
 					this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
@@ -389,12 +406,12 @@ public class Mixer {
 				}
 				
 				//new proofs construction
-				if(outputOrder == 0) {
-					this.ownProof.addTransaction(mixTx, outputOrder);
-				} else {
-					this.ownProof = this.partnerProof;
-					this.ownProof.addTransaction(mixTx, outputOrder);
-				}
+//				if(outputOrder == 0) {
+//					this.ownProof.addTransaction(mixTx, outputOrder);
+//				} else {
+//					this.ownProof = this.partnerProof;
+//					this.ownProof.addTransaction(mixTx, outputOrder);
+//				}
 	}
 	
 	

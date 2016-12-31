@@ -90,6 +90,7 @@ public class MainClass {
 		}
 		PTP ptp = new PTP(System.getProperty("user.dir"));
 		try {
+			//TODO move ptp to mixer
 			ptp.init();
 			ptp.createHiddenService();
 			ptp.getIdentifier().getTorAddress();
@@ -183,13 +184,13 @@ public class MainClass {
 		System.out.println(wallet.currentReceiveAddress().toBase58());
 		if(wallet.getBalance(BalanceType.AVAILABLE).isLessThan(totalOutput)) {
 			//use faucet to get some coins
-			try {
-				System.out.println("sleep for 10minutes");
-				TimeUnit.MINUTES.sleep(10);
-			} catch (InterruptedException e2) {
+			//try {
+			//	System.out.println("sleep for 10minutes");
+			//	TimeUnit.MINUTES.sleep(10);
+			//} catch (InterruptedException e2) {
 				// TODO Auto-generated catch block
-				e2.printStackTrace();
-			}
+		//		e2.printStackTrace();
+		//	}
 		}
 		System.out.println("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
 
@@ -285,9 +286,10 @@ public class MainClass {
 						e1.printStackTrace();
 					}
 					//Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
-					Mixer m = new Mixer(ptp, destinationAddress, pm, wallet, params);
+					Mixer m = new Mixer(ptp, destinationAddress, pm, wallet, params, pg);
 
 					m.initiateMix();
+					TimeUnit.MINUTES.sleep(10);
 					break;
 				}
 			}
