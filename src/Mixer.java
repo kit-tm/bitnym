@@ -23,7 +23,9 @@ import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.ProtocolException;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionBroadcast;
+import org.bitcoinj.core.TransactionConfidence;
 import org.bitcoinj.core.TransactionOutput;
+import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.Script.VerifyFlag;
 import org.bitcoinj.script.ScriptBuilder;
@@ -113,17 +115,8 @@ public class Mixer {
 				//deserialize received tx, and add own input and output and
 				//sign then and send back
 				System.out.println("try to deserialize tx received from mixpartner");
-				BitcoinSerializer bs = new BitcoinSerializer(params, false);
-				ByteBuffer bb = ByteBuffer.wrap(arg0);
-				Transaction rcvdTx = null;
-				try {
-					rcvdTx = bs.makeTransaction(arg0);
-					System.out.println("deserialized tx received from mixpartner");
-				} catch (ProtocolException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-
+				Transaction rcvdTx = deserializeTransaction(arg0);
+				System.out.println("deserialized tx received from mixpartner");
 				//check that tx input references the psynym in the proof
 				Set<Script.VerifyFlag> s = new HashSet<Script.VerifyFlag>();
 				//rcvdTx.getInput(0).getScriptSig().correctlySpends(rcvdTx, 0, partnerProof.getLastTransactionOutput().getScriptPubKey(),s);
@@ -149,7 +142,11 @@ public class Mixer {
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
 							// TODO Auto-generated method stub
-							arg0
+							Transaction finishedTx = deserializeTransaction(arg0);
+							w.commitTx(finishedTx);
+							System.out.println("commited mixtx to wallet");
+							//TODO add confidence change event listener, then add to end of proof message
+							//TODO check consistency with signed tx
 						}
 					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
@@ -314,7 +311,7 @@ public class Mixer {
 				// draw random value for decision of output order
 				// security of randomness? probably not a big thing
 				Random r = new Random();
-				int outputOrder = r.nextInt(2);
+				final int outputOrder;// = r.nextInt(2);
 				outputOrder = 0;
 				//set the value later on
 				ECKey psnymKey = new ECKey();
@@ -337,14 +334,16 @@ public class Mixer {
 						public void messageReceived(byte[] arg0, Identifier arg1) {
 							BitcoinSerializer bs = new BitcoinSerializer(params, false);
 							ByteBuffer bb = ByteBuffer.wrap(arg0);
-							Transaction rcvdTx = null;
+							Transaction helperTx = null;
+							final Transaction rcvdTx;
 							try {
-								rcvdTx = bs.makeTransaction(arg0);
+								helperTx = bs.makeTransaction(arg0);
 								//rcvdTx = (Transaction) bs.deserialize(bb);
 							} catch (ProtocolException e) {
 								// TODO Auto-generated catch block
 								e.printStackTrace();
 							}
+							rcvdTx = helperTx;
 							checkTx(mixTx, rcvdTx, partnerProof);
 							//sign transaction and send it to the network
 							//get the signing key from wallet
@@ -361,6 +360,23 @@ public class Mixer {
 							w.commitTx(rcvdTx);
 							TransactionBroadcast broadcast = pg.broadcastTransaction(rcvdTx);
 							//ListenableFuture<Transaction> future = broadcast.broadcast();
+							rcvdTx.getConfidence().addEventListener(new TransactionConfidence.Listener() {
+								
+								@Override
+								public void onConfidenceChanged(TransactionConfidence arg0,
+										ChangeReason arg1) {
+									// TODO Auto-generated method stub
+									if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+										return;
+									}
+									if(arg0.getDepthInBlocks() == 1) {
+										//add to proof message and write to file
+										ownProof.addTransaction(rcvdTx, outputOrder);
+										ownProof.writeToFile();
+										//TODO remove eventlistener
+									}
+								}
+							});
 							
 						}
 					});
@@ -400,6 +416,17 @@ public class Mixer {
 //				}
 	}
 	
+	private Transaction deserializeTransaction(byte[] arg0) {
+		Transaction rcvdTx = null;
+		BitcoinSerializer bs = new BitcoinSerializer(params, false);
+		try {
+			rcvdTx = bs.makeTransaction(arg0);			
+		} catch (ProtocolException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return rcvdTx;
+	}
 	
 	
 	

@@ -183,4 +183,10 @@ public class ProofMessage implements Serializable {
 		return retValue;
 	}
 
+	//TODO move file management of the proof message into this class
+	public void writeToFile() {
+		// TODO Auto-generated method stub
+		
+	}
+
 }
