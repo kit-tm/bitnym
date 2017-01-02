@@ -22,6 +22,7 @@ import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.ProtocolException;
 import org.bitcoinj.core.Transaction;
+import org.bitcoinj.core.TransactionBroadcast;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.Script.VerifyFlag;
@@ -31,12 +32,15 @@ import org.bitcoinj.wallet.CoinSelector;
 import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 
+import com.google.common.util.concurrent.ListenableFuture;
+
 import edu.kit.tm.ptp.Identifier;
 import edu.kit.tm.ptp.PTP;
 import edu.kit.tm.ptp.ReceiveListener;
 import edu.kit.tm.ptp.SendListener;
 import edu.kit.tm.ptp.SendListener.State;
 
+//TODO commitTx with complete tx send by mixpartner needs to be called
 
 public class Mixer {
 	private PTP ptp;
@@ -140,6 +144,14 @@ public class Mixer {
 					ECKey k = w.findKeyFromPubHash(pubkeyHash);
 					rcvdTx.addSignedInput(ownProof.getLastTransactionOutput(), k);
 					rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
+					ptp.setReceiveListener(new ReceiveListener() {
+						
+						@Override
+						public void messageReceived(byte[] arg0, Identifier arg1) {
+							// TODO Auto-generated method stub
+							arg0
+						}
+					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
 				}
 
@@ -342,40 +354,14 @@ public class Mixer {
 							
 							//this method just does rudimentary checks, does not check whether inputs are already spent for example
 							rcvdTx.verify();
-//							SendRequest req = SendRequest.forTx(rcvdTx);
-//							req.shuffleOutputs = false;
-//							req.signInputs = false;
-//							req.changeAddress = null;
-//							req.ensureMinRequiredFee = false;
-//							req.coinSelector = new CoinSelector() {
-//								
-//								@Override
-//								public CoinSelection select(Coin arg0, List<TransactionOutput> arg1) {
-//									// TODO Auto-generated method stub
-//									return null;
-//								}
-//							};
-//							Wallet.SendResult result = null;
+
 							System.out.println(rcvdTx);
 							System.out.println(ownProof.getLastTransactionOutput());
 							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
-							pg.broadcastTransaction(rcvdTx);
-//							try {
-//								result = w.sendCoins(req);
-//							} catch (InsufficientMoneyException e1) {
-//								// TODO Auto-generated catch block
-//								e1.printStackTrace();
-//							}
-//
-//							try {
-//								result.broadcastComplete.get();
-//							} catch (InterruptedException e) {
-//								// TODO Auto-generated catch block
-//								e.printStackTrace();
-//							} catch (ExecutionException e) {
-//								// TODO Auto-generated catch block
-//								e.printStackTrace();
-//							}
+							w.commitTx(rcvdTx);
+							TransactionBroadcast broadcast = pg.broadcastTransaction(rcvdTx);
+							//ListenableFuture<Transaction> future = broadcast.broadcast();
+							
 						}
 					});
 					this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);

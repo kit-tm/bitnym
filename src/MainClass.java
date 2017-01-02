@@ -184,13 +184,13 @@ public class MainClass {
 		System.out.println(wallet.currentReceiveAddress().toBase58());
 		if(wallet.getBalance(BalanceType.AVAILABLE).isLessThan(totalOutput)) {
 			//use faucet to get some coins
-			//try {
-			//	System.out.println("sleep for 10minutes");
-			//	TimeUnit.MINUTES.sleep(10);
-			//} catch (InterruptedException e2) {
-				// TODO Auto-generated catch block
-		//		e2.printStackTrace();
-		//	}
+			try {
+				System.out.println("sleep for 10minutes");
+				TimeUnit.MINUTES.sleep(15);
+			} catch (InterruptedException e2) {
+				//TODO Auto-generated catch block
+				e2.printStackTrace();
+			}
 		}
 		System.out.println("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
 
@@ -226,7 +226,6 @@ public class MainClass {
 			//generate genesis transaction if we proof is empty
 			if(pm.getValidationPath().size() == 0) {
 				Transaction genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f);
-				System.out.println("genereated genesis tx");
 				//TODO register listener before sending tx out, to avoid missing a confidence change
 				genesisTx.getConfidence().addEventListener(new Listener() {
 
@@ -314,6 +313,7 @@ public class MainClass {
 	//TODO refactor this out into an seperate class, and split into generating transaction
 	// and sending of the transaction
 	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm, File f) throws InsufficientMoneyException {
+		System.out.println("try generating genesis tx");
 		Transaction tx = new Transaction(params);
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
@@ -374,7 +374,9 @@ public class MainClass {
 		}
 		try {
 			result.broadcastComplete.get();
+			System.out.println("broadcast complete");
 			pm.addTransaction(result.tx, 1);
+			System.out.println("added genesis tx to proof message data structure");
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -382,6 +384,7 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		System.out.println("genereated genesis tx");
 		return tx;
 	}
 
