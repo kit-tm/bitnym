@@ -1,4 +1,8 @@
 import java.io.EOFException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -21,7 +25,10 @@ public class ProofMessage implements Serializable {
 	/**
 	 * 
 	 */
+	
+	//TODO add event listener for last transaction if blockheight is not at least 1
 	private static final long serialVersionUID = 1L;
+	private String filePath;
 	private List<Transaction> validationPath;
 	public void setValidationPath(List<Transaction> validationPath) {
 		this.validationPath = validationPath;
@@ -50,13 +57,40 @@ public class ProofMessage implements Serializable {
 		
 		//determines the corresponding output within the the mix txs
 		this.outputIndices = new ArrayList<Integer>();
+		this.filePath = System.getProperty("user.dir") + "/proofmessage.pm";
+		try {
+			File file = new File(filePath);
+			if(file.exists()) {  
+			   FileInputStream fin = new FileInputStream(file);
+			   ObjectInputStream ois = new ObjectInputStream(fin);
+			   ProofMessage tmp = (ProofMessage) ois.readObject();
+			   this.outputIndices = tmp.outputIndices;
+			   this.validationPath = tmp.validationPath;
+			   ois.close();
+			   fin.close();
+			}
+			
+		} catch (FileNotFoundException e4) {
+			// TODO Auto-generated catch block
+			e4.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 	
 	public ProofMessage(List<Transaction> vP, List<Integer> oIdices) {
 		this.validationPath = vP;
 		this.outputIndices = oIdices;
+		
+		
 		assert(vP.size() == oIdices.size());
 	}
+	
+	//TODO Constructor with certain path string or file in constructor
 	
 	public boolean isValidPath() {
 		return false;
@@ -185,7 +219,24 @@ public class ProofMessage implements Serializable {
 
 	//TODO move file management of the proof message into this class
 	public void writeToFile() {
-		// TODO Auto-generated method stub
+		try {
+			File file = new File(filePath);
+			if(!file.exists()) {
+				file.createNewFile();
+			}
+			FileOutputStream fout = new FileOutputStream(file);
+			ObjectOutputStream oos = new ObjectOutputStream(fout);
+			oos.writeObject(this);
+			oos.close();
+			fout.close();
+			System.out.println("saved proof message to file ");
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
 	}
 

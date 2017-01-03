@@ -23,6 +23,7 @@ import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Transaction;
+import org.bitcoinj.core.TransactionBroadcast;
 import org.bitcoinj.core.TransactionConfidence;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionOutput;
@@ -40,6 +41,9 @@ import org.bitcoinj.wallet.Wallet.BalanceType;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.core.listeners.PeerConnectedEventListener;
+
+import com.google.common.util.concurrent.ListenableFuture;
+
 import edu.kit.tm.ptp.PTP;
 
 
@@ -61,39 +65,13 @@ public class MainClass {
 		MainClass.params = TestNet3Params.get();
 		
 		final ProofMessage pm = new ProofMessage();
-		ProofMessage pm2 = null;
-		try {
-			File file = new File(System.getProperty("user.dir") + "/proofmessage.pm");
-			if(file.exists()) {  
-			   FileInputStream fin = new FileInputStream(file);
-			   ObjectInputStream ois = new ObjectInputStream(fin);
-			   pm2 = (ProofMessage) ois.readObject();
-			   ois.close();
-			   fin.close();
-			}
-			
-		} catch (FileNotFoundException e4) {
-			// TODO Auto-generated catch block
-			e4.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 
-		//shallow copy from pm2 to pm, this is necessary because of final modifier
-		if(pm2 != null) {
-			pm.setOutputIndices(pm2.getOutputIndices());
-			pm.setValidationPath(pm2.getValidationPath());
-		}
 		PTP ptp = new PTP(System.getProperty("user.dir"));
 		try {
 			//TODO move ptp to mixer
 			ptp.init();
 			ptp.createHiddenService();
-			ptp.getIdentifier().getTorAddress();
+			System.out.println(ptp.getIdentifier().getTorAddress());
 		} catch (IOException e3) {
 			// TODO Auto-generated catch block
 			e3.printStackTrace();
@@ -222,10 +200,11 @@ public class MainClass {
 //			// TODO Auto-generated catch block
 //			e1.printStackTrace();
 //		}
+		Transaction genesisTx;
 		try {
 			//generate genesis transaction if we proof is empty
-			if(pm.getValidationPath().size() == 0) {
-				Transaction genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f);
+			if(pm.getValidationPath().size() == 0 && wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
+				genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f);
 				//TODO register listener before sending tx out, to avoid missing a confidence change
 				genesisTx.getConfidence().addEventListener(new Listener() {
 
@@ -237,24 +216,7 @@ public class MainClass {
 						}
 						if(arg0.getDepthInBlocks() == 1) {
 							//enough confidence, write proof message to the file system
-							try {
-								File file = new File(System.getProperty("user.dir") + "/proofmessage.pm");
-								if(!file.exists()) {
-									file.createNewFile();
-								}
-								FileOutputStream fout = new FileOutputStream(file);
-								ObjectOutputStream oos = new ObjectOutputStream(fout);
-								oos.writeObject(pm);
-								oos.close();
-								fout.close();
-								System.out.println("saved proof message to file ");
-							} catch (FileNotFoundException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							} catch (IOException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
+							System.out.println("depth of genesis tx is now 1, consider ready for usage");
 						}
 					}
 				});
@@ -271,7 +233,7 @@ public class MainClass {
 			for(int i=0; i<50;i++) {
 		//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 				//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
-				if(pm.isEmpty()) {	
+				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
 					TimeUnit.MINUTES.sleep(1);
 				} else {
 					BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
@@ -365,25 +327,38 @@ public class MainClass {
 		req.changeAddress = changeAdrs;
 		req.shuffleOutputs = false;
 		req.signInputs = true;
-		Wallet.SendResult result = w.sendCoins(req);
+		w.completeTx(req);
+		w.commitTx(req.tx);
 		try {
 			w.saveToFile(f);
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
+		//Wallet.SendResult result = w.sendCoins(req);
+		TransactionBroadcast a = pg.broadcastTransaction(req.tx);
+		ListenableFuture<Transaction> future = a.broadcast();
 		try {
-			result.broadcastComplete.get();
-			System.out.println("broadcast complete");
-			pm.addTransaction(result.tx, 1);
-			System.out.println("added genesis tx to proof message data structure");
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ExecutionException e) {
+			Transaction b = future.get();
+			pm.addTransaction(b,1);
+			pm.writeToFile();
+		} catch (InterruptedException | ExecutionException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+//		try {
+//			result.broadcastComplete.get();
+//			System.out.println("broadcast complete");
+//			pm.addTransaction(result.tx, 1);
+//			pm.writeToFile();
+//			System.out.println("added genesis tx to proof message data structure and file");
+//		} catch (InterruptedException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		} catch (ExecutionException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 		System.out.println("genereated genesis tx");
 		return tx;
 	}

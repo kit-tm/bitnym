@@ -26,6 +26,7 @@ import org.bitcoinj.core.TransactionBroadcast;
 import org.bitcoinj.core.TransactionConfidence;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
+import org.bitcoinj.core.listeners.TransactionConfidenceEventListener;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.Script.VerifyFlag;
 import org.bitcoinj.script.ScriptBuilder;
@@ -43,6 +44,7 @@ import edu.kit.tm.ptp.SendListener;
 import edu.kit.tm.ptp.SendListener.State;
 
 //TODO commitTx with complete tx send by mixpartner needs to be called
+//TODO implement other branch case for different output order
 
 public class Mixer {
 	private PTP ptp;
@@ -115,7 +117,7 @@ public class Mixer {
 				//deserialize received tx, and add own input and output and
 				//sign then and send back
 				System.out.println("try to deserialize tx received from mixpartner");
-				Transaction rcvdTx = deserializeTransaction(arg0);
+				final Transaction rcvdTx = deserializeTransaction(arg0);
 				System.out.println("deserialized tx received from mixpartner");
 				//check that tx input references the psynym in the proof
 				Set<Script.VerifyFlag> s = new HashSet<Script.VerifyFlag>();
@@ -142,8 +144,31 @@ public class Mixer {
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
 							// TODO Auto-generated method stub
+							System.out.println("deserialize finished transaction");
 							Transaction finishedTx = deserializeTransaction(arg0);
 							w.commitTx(finishedTx);
+							ownProof.addTransaction(finishedTx, 1);
+							ownProof.writeToFile();
+							System.out.println("write out new proof");
+							finishedTx.getConfidence().addEventListener(new TransactionConfidence.Listener() {
+
+								@Override
+								public void onConfidenceChanged(
+										TransactionConfidence arg0,
+										ChangeReason arg1) {
+									// TODO Auto-generated method stub
+									if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+										return;
+									}
+									if(arg0.getDepthInBlocks() == 1) {
+										//add to proof message and write to file
+										System.out.println("confidence of mix tx is 1");
+
+										//TODO remove eventlistener
+									}
+									
+								}
+							});
 							System.out.println("commited mixtx to wallet");
 							//TODO add confidence change event listener, then add to end of proof message
 							//TODO check consistency with signed tx
@@ -274,6 +299,7 @@ public class Mixer {
 	
 	
 	public void listenForMix() {
+		System.out.println("listenformix");
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
@@ -357,9 +383,15 @@ public class Mixer {
 							System.out.println(rcvdTx);
 							System.out.println(ownProof.getLastTransactionOutput());
 							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+							//TODO remove transaction if transaction is rejected, maybe just add to proof message only, and commit only when in the blockchain?
 							w.commitTx(rcvdTx);
+							ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
 							TransactionBroadcast broadcast = pg.broadcastTransaction(rcvdTx);
 							//ListenableFuture<Transaction> future = broadcast.broadcast();
+							ownProof.addTransaction(rcvdTx, outputOrder);
+							ownProof.writeToFile();
+							//TODO check later on that block is in blockchain, in case that program terminates, maybe a flag or something in proof messages
+							//that indicates this?
 							rcvdTx.getConfidence().addEventListener(new TransactionConfidence.Listener() {
 								
 								@Override
@@ -371,8 +403,8 @@ public class Mixer {
 									}
 									if(arg0.getDepthInBlocks() == 1) {
 										//add to proof message and write to file
-										ownProof.addTransaction(rcvdTx, outputOrder);
-										ownProof.writeToFile();
+										System.out.println("confidence of mix tx is 1");
+
 										//TODO remove eventlistener
 									}
 								}
