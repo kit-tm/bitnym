@@ -105,6 +105,7 @@ public class ProofMessage implements Serializable {
 	}
 	
 	public boolean isNymTxInBlockChain() {
+		//get filtered block with transaction and check merkel tree
 		return false;
 	}
 	

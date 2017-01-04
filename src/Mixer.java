@@ -46,6 +46,8 @@ import edu.kit.tm.ptp.SendListener.State;
 //TODO commitTx with complete tx send by mixpartner needs to be called
 //TODO implement other branch case for different output order
 
+//TODO check which broadcastannouncement read and accepted for mixing, and check whether we want to mix this nym or not
+
 public class Mixer {
 	private PTP ptp;
 	private Identifier mixPartnerAdress;
@@ -132,7 +134,8 @@ public class Mixer {
 					ECKey newPsnymKey = new ECKey();
 					Address nymAdrs = new Address(params, newPsnymKey.getPubKeyHash());
 					w.importKey(newPsnymKey);
-					TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, Coin.valueOf(150000), nymAdrs);
+					Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
+					TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, newPsyNymValue, nymAdrs);
 					rcvdTx.addOutput(newPsyNym);
 					//sign input and send back for signing
 					byte[] pubkeyHash = ownProof.getLastTransactionOutput().getScriptPubKey().getPubKeyHash();
@@ -344,7 +347,8 @@ public class Mixer {
 				Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
 				w.importKey(psnymKey);
 				//TODO compute the right value as (input1 + input2 - fee)/2
-				TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, Coin.valueOf(150000), nymAdrs);
+				Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
+				TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, nymAdrs);
 				byte[] serializedTx;
 				if(outputOrder == 0) {
 					//add the own output and send the unfinished tx to the mix partner
@@ -448,6 +452,20 @@ public class Mixer {
 //				}
 	}
 	
+	
+	//we need to precompute the fee as we only have the two psnyms as inputs (to not deanonymize mix partners, by linking change addresses for example
+	//default_tx_fee in bitcoin is static, should be computed (by past txs for example) instead for probable rise in tx cost in the future
+	private Coin computeValueOfNewPsyNyms(Coin ownValue, Coin mixpartnerVal, Coin feePerKb) {
+		assert(ownValue != null && mixpartnerVal != null && feePerKb != null);
+		//statically computed, is ok as we know the size of the mixTx approximately
+		//estimated by the following formula in*180 + out*34 + 10 + in, where in and out are the number of inputs and outputs
+		double sizeInKBytes = ((double) (2*180+2*34 + 10 + 2))/1000.0;
+		Coin fee = Coin.valueOf((int) (feePerKb.getValue() * sizeInKBytes));
+		
+		return ((ownValue.add(mixpartnerVal)).minus(fee)).div(2);
+	}
+
+
 	private Transaction deserializeTransaction(byte[] arg0) {
 		Transaction rcvdTx = null;
 		BitcoinSerializer bs = new BitcoinSerializer(params, false);
