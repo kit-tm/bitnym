@@ -17,6 +17,8 @@ import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.ProtocolException;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 
@@ -26,6 +28,7 @@ public class ProofMessage implements Serializable {
 	 * 
 	 */
 	
+	private static final Logger log = LoggerFactory.getLogger(ProofMessage.class);
 	//TODO add event listener for last transaction if blockheight is not at least 1
 	private static final long serialVersionUID = 1L;
 	private String filePath;
@@ -52,15 +55,22 @@ public class ProofMessage implements Serializable {
 
 	private List<Integer> outputIndices;
 	
-	public ProofMessage() {
-		this.validationPath = new ArrayList<Transaction>();
-		
+	//default file is proofmessage.pm
+	//TODO use config file for specification of proofmessage filename
+	public ProofMessage() {		
+		this(System.getProperty("user.dir") + "/proofmessage.pm");
+	}
+	
+	//use certain proof message file
+	public ProofMessage(String path) {
 		//determines the corresponding output within the the mix txs
+		this.validationPath = new ArrayList<Transaction>();
 		this.outputIndices = new ArrayList<Integer>();
-		this.filePath = System.getProperty("user.dir") + "/proofmessage.pm";
+		this.filePath = path;
 		try {
 			File file = new File(filePath);
-			if(file.exists()) {  
+			if(file.exists()) {
+			   log.info("Proof Message file " + path + " exists, read data structure");
 			   FileInputStream fin = new FileInputStream(file);
 			   ObjectInputStream ois = new ObjectInputStream(fin);
 			   ProofMessage tmp = (ProofMessage) ois.readObject();
@@ -68,6 +78,7 @@ public class ProofMessage implements Serializable {
 			   this.validationPath = tmp.validationPath;
 			   ois.close();
 			   fin.close();
+			   log.info("completed reading in proof message file");
 			}
 			
 		} catch (FileNotFoundException e4) {
@@ -128,6 +139,7 @@ public class ProofMessage implements Serializable {
 		}
 	}
 	
+	//TODO throw exception instead of -1, or assertion that caller assure that a tx exists?
 	public int getLastOutputIndex() {
 		if (validationPath.size() > 0) {
 			return outputIndices.get(outputIndices.size()-1).intValue();
@@ -221,6 +233,7 @@ public class ProofMessage implements Serializable {
 	//TODO move file management of the proof message into this class
 	public void writeToFile() {
 		try {
+			log.info("try saving proof message to disk");
 			File file = new File(filePath);
 			if(!file.exists()) {
 				file.createNewFile();
@@ -230,7 +243,7 @@ public class ProofMessage implements Serializable {
 			oos.writeObject(this);
 			oos.close();
 			fout.close();
-			System.out.println("saved proof message to file ");
+			log.info("saved proof message to file: " + filePath);
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

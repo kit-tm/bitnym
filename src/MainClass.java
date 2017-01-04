@@ -41,6 +41,8 @@ import org.bitcoinj.wallet.Wallet.BalanceType;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.core.listeners.PeerConnectedEventListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
@@ -51,7 +53,7 @@ import edu.kit.tm.ptp.PTP;
 
 public class MainClass {
 	
-	
+	private static final Logger log = LoggerFactory.getLogger(MainClass.class);
 	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
 	private static Coin PSNYMVALUE = Coin.valueOf(200000);
 	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
@@ -64,11 +66,13 @@ public class MainClass {
 		//initialize neccessary bitcoinj variables
 		MainClass.params = TestNet3Params.get();
 		
+		log.info("testTestTest");
 		final ProofMessage pm = new ProofMessage();
 
 		PTP ptp = new PTP(System.getProperty("user.dir"));
 		try {
 			//TODO move ptp to mixer
+			log.info("initiate ptp and create hidden service");
 			ptp.init();
 			ptp.createHiddenService();
 			System.out.println(ptp.getIdentifier().getTorAddress());
@@ -111,7 +115,8 @@ public class MainClass {
 			e.printStackTrace();
 		}
 		
-		System.out.println(pm);
+		log.info("this is the current proof chain");
+		log.info(pm.toString());
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
 		System.setProperty("socksProxyHost", "127.0.0.1");
 		System.setProperty("socksProxyPort", "9050");
@@ -153,12 +158,13 @@ public class MainClass {
 		t.start();
 		System.out.println("bloom filter assertion");
 	    //pg.getDownloadPeer().setBloomFilter(filter);
+		log.info("insert our broadcast transaction identifier string, into bloom filter of current download peer");
 	    pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
 		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		
 		
-		System.out.println("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
-		System.out.println("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
+		log.info("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
+		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
 		System.out.println(wallet.currentReceiveAddress().toBase58());
 		if(wallet.getBalance(BalanceType.AVAILABLE).isLessThan(totalOutput)) {
 			//use faucet to get some coins
@@ -170,7 +176,7 @@ public class MainClass {
 				e2.printStackTrace();
 			}
 		}
-		System.out.println("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
+		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
 
 		
 		
@@ -202,7 +208,7 @@ public class MainClass {
 //		}
 		Transaction genesisTx;
 		try {
-			//generate genesis transaction if we proof is empty
+			//generate genesis transaction if our proof is empty
 			if(pm.getValidationPath().size() == 0 && wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
 				genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f);
 				//TODO register listener before sending tx out, to avoid missing a confidence change
@@ -276,7 +282,7 @@ public class MainClass {
 	//TODO refactor this out into an seperate class, and split into generating transaction
 	// and sending of the transaction
 	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm, File f) throws InsufficientMoneyException {
-		System.out.println("try generating genesis tx");
+		log.info("try generating genesis tx");
 		Transaction tx = new Transaction(params);
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
@@ -316,7 +322,7 @@ public class MainClass {
 		w.importKey(changeKey);
 //		tx.addOutput(new TransactionOutput(params, tx, suffInptValue.minus(totalOutput), changeAdrs));	
 		try {
-			System.out.println("verify the transaction");
+			log.info("verify the transaction");
 			tx.verify();
 		} catch (VerificationException e) {
 			e.printStackTrace();
@@ -360,7 +366,7 @@ public class MainClass {
 //			// TODO Auto-generated catch block
 //			e.printStackTrace();
 //		}
-		System.out.println("genereated genesis tx");
+		log.info("genereated genesis tx");
 		return tx;
 	}
 
