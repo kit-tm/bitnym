@@ -1,3 +1,6 @@
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
@@ -13,6 +16,8 @@ import org.bitcoinj.script.ScriptOpCodes;
  *
  */
 public class CLTVScriptPair {
+	
+	private static final int LOCKTIME_TRESHOLD = 500000000;
 	private Script pubKeyScript;
 	private Script redeemScript;
 	
@@ -23,11 +28,12 @@ public class CLTVScriptPair {
 	
 	
 	//TODO compute expire date maybe in this class, instead of letting the caller doing the work?
-	CLTVScriptPair(ECKey newPsynymKey, int expireDate) {
+	//TODO compute unix time 
+	CLTVScriptPair(ECKey newPsynymKey, long expireDate) {
 		ScriptBuilder sb = new ScriptBuilder();
 		
-		//the part that freezes the tx output
-		sb.number(expireDate);
+		//the part that freezes the tx output, special 5 byte number
+		sb.data(encodeExpireDate(expireDate));
 		sb.op(ScriptOpCodes.OP_CHECKLOCKTIMEVERIFY);
 		sb.op(ScriptOpCodes.OP_DROP);
 		
@@ -42,4 +48,30 @@ public class CLTVScriptPair {
 		
 		pubKeyScript = ScriptBuilder.createP2SHOutputScript(redeemScript);
 	}
+	
+	//TODO encode sign in most-significant bit
+	//checklocktimeverify has a special format, encode this into a bytearray to add to the script
+	private byte[] encodeExpireDate(long expireDate) {
+		int numOfBits = CLTVScriptPair.log(expireDate, 2);
+		int numOfBytes = CLTVScriptPair.log(numOfBits, 8);
+		ByteBuffer b = ByteBuffer.allocate(numOfBytes);
+		b.order(ByteOrder.LITTLE_ENDIAN);
+		b.putLong(expireDate);
+		return null;
+	}
+
+
+	public Script getPubKeyScript() {
+		return this.pubKeyScript;
+	}
+	
+	public Script getRedeemScript() {
+		return this.redeemScript;
+	}
+	
+	private static int log(long expireDate, int base) {
+		return (int) (Math.log(expireDate) / Math.log(base));
+	}
+	
+	
 }

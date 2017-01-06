@@ -181,6 +181,8 @@ public class Mixer {
 				}
 
 			}
+
+
 		});
 		this.ptp.sendMessage(serialize(ownProof), mixPartnerAdress);
 		try {
@@ -477,6 +479,7 @@ public class Mixer {
 		}
 		return rcvdTx;
 	}
+	
 	
 	
 	
