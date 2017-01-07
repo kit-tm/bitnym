@@ -130,27 +130,29 @@ public class Mixer {
 
 				} else if(rcvdTx.getOutputs().size() == 1) {
 					System.out.println("partner added first output to the tx");
-					//partner added already his output					
+					//partner added already his output			
 					ECKey newPsnymKey = new ECKey();
 					Address nymAdrs = new Address(params, newPsnymKey.getPubKeyHash());
 					w.importKey(newPsnymKey);
+					long unixTime = System.currentTimeMillis() / 1000L;
+					final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, unixTime);
 					Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
-					TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, newPsyNymValue, nymAdrs);
+					TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 					rcvdTx.addOutput(newPsyNym);
 					//sign input and send back for signing
-					byte[] pubkeyHash = ownProof.getLastTransactionOutput().getScriptPubKey().getPubKeyHash();
-					ECKey k = w.findKeyFromPubHash(pubkeyHash);
-					rcvdTx.addSignedInput(ownProof.getLastTransactionOutput(), k);
+					CLTVScriptPair inSp = ownProof.getScriptPair();
+					rcvdTx.addInput(ownProof.getLastTransactionOutput());
+					rcvdTx.getInput(1).setScriptSig(inSp.calculateSigScript(rcvdTx, 1, w));
+					
 					rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					ptp.setReceiveListener(new ReceiveListener() {
 						
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
-							// TODO Auto-generated method stub
 							System.out.println("deserialize finished transaction");
 							Transaction finishedTx = deserializeTransaction(arg0);
 							w.commitTx(finishedTx);
-							ownProof.addTransaction(finishedTx, 1);
+							ownProof.addTransaction(finishedTx, 1, outSp);
 							ownProof.writeToFile();
 							System.out.println("write out new proof");
 							finishedTx.getConfidence().addEventListener(new TransactionConfidence.Listener() {
@@ -348,9 +350,14 @@ public class Mixer {
 				ECKey psnymKey = new ECKey();
 				Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
 				w.importKey(psnymKey);
+				long unixTime = System.currentTimeMillis() / 1000L;
+				//add wished lock time
+				final CLTVScriptPair inSp = ownProof.getScriptPair();
+				//TODO add wished locktime
+				final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime);
 				//TODO compute the right value as (input1 + input2 - fee)/2
 				Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
-				TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, nymAdrs);
+				TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 				byte[] serializedTx;
 				if(outputOrder == 0) {
 					//add the own output and send the unfinished tx to the mix partner
@@ -366,6 +373,7 @@ public class Mixer {
 						public void messageReceived(byte[] arg0, Identifier arg1) {
 							BitcoinSerializer bs = new BitcoinSerializer(params, false);
 							ByteBuffer bb = ByteBuffer.wrap(arg0);
+							//use helperTx to circumvent final modifier restriction
 							Transaction helperTx = null;
 							final Transaction rcvdTx;
 							try {
@@ -378,10 +386,9 @@ public class Mixer {
 							rcvdTx = helperTx;
 							checkTx(mixTx, rcvdTx, partnerProof);
 							//sign transaction and send it to the network
-							//get the signing key from wallet
-							byte[] pubkeyHash = ownProof.getLastTransactionOutput().getScriptPubKey().getPubKeyHash();
-							ECKey k = w.findKeyFromPubHash(pubkeyHash);
-							rcvdTx.getInput(0).setScriptSig((ScriptBuilder.createInputScript(rcvdTx.calculateSignature(0, k, ownProof.getLastTransactionOutput().getScriptPubKey(), Transaction.SigHash.ALL, false), k)));							
+
+							//rcvdTx.getInput(0).setScriptSig((ScriptBuilder.createInputScript(rcvdTx.calculateSignature(0, k, ownProof.getLastTransactionOutput().getScriptPubKey(), Transaction.SigHash.ALL, false), k)));							
+							rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
 							
 							//this method just does rudimentary checks, does not check whether inputs are already spent for example
 							rcvdTx.verify();
@@ -394,7 +401,7 @@ public class Mixer {
 							ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
 							TransactionBroadcast broadcast = pg.broadcastTransaction(rcvdTx);
 							//ListenableFuture<Transaction> future = broadcast.broadcast();
-							ownProof.addTransaction(rcvdTx, outputOrder);
+							ownProof.addTransaction(rcvdTx, outputOrder, outSp);
 							ownProof.writeToFile();
 							//TODO check later on that block is in blockchain, in case that program terminates, maybe a flag or something in proof messages
 							//that indicates this?
@@ -457,6 +464,7 @@ public class Mixer {
 	
 	//we need to precompute the fee as we only have the two psnyms as inputs (to not deanonymize mix partners, by linking change addresses for example
 	//default_tx_fee in bitcoin is static, should be computed (by past txs for example) instead for probable rise in tx cost in the future
+	//TODO use other formula for p2sh mixtx
 	private Coin computeValueOfNewPsyNyms(Coin ownValue, Coin mixpartnerVal, Coin feePerKb) {
 		assert(ownValue != null && mixpartnerVal != null && feePerKb != null);
 		//statically computed, is ok as we know the size of the mixTx approximately
@@ -478,6 +486,10 @@ public class Mixer {
 			e.printStackTrace();
 		}
 		return rcvdTx;
+	}
+	
+	private void addSignedP2SHInput(Transaction tx, Script redeemScript) {
+		
 	}
 	
 	

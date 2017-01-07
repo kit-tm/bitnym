@@ -8,6 +8,7 @@ import org.bitcoinj.script.ScriptOpCodes;
 import org.spongycastle.util.Arrays;
 
 //TODO change order of op_return output and change adress, to fit in input output relation in a transaction of a bitnym proof
+//TODO change to our p2sh
 
 
 public class BroadcastAnnouncement {

@@ -1,10 +1,18 @@
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import org.bitcoinj.core.ECKey;
+import org.bitcoinj.core.Transaction;
+import org.bitcoinj.core.Transaction.SigHash;
+import org.bitcoinj.crypto.TransactionSignature;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.script.ScriptOpCodes;
+import org.bitcoinj.wallet.Wallet;
 
 /**
  * We need special p2sh script, which locks the txoutputs,
@@ -15,15 +23,22 @@ import org.bitcoinj.script.ScriptOpCodes;
  * @author kai
  *
  */
-public class CLTVScriptPair {
+
+
+//TODO: bitcoinj doesn't seem to support management of redeemscripts for custom p2sh,
+//maybe use serializable hashtable to store some CLTVScriptPair needed for when creating inputs
+//spending those p2sh outputs
+public class CLTVScriptPair implements Serializable {
 	
 	private static final int LOCKTIME_TRESHOLD = 500000000;
 	private Script pubKeyScript;
 	private Script redeemScript;
+	private byte[] pubkeyHash; //to get the key by pubkeyhash
 	
 	CLTVScriptPair(Script a, Script b) {
 		this.pubKeyScript = a;
 		this.redeemScript = b;
+		this.pubkeyHash = b.getPubKeyHash();
 	}
 	
 	
@@ -46,7 +61,8 @@ public class CLTVScriptPair {
 		
 		this.redeemScript = sb.build();
 		
-		pubKeyScript = ScriptBuilder.createP2SHOutputScript(redeemScript);
+		this.pubKeyScript = ScriptBuilder.createP2SHOutputScript(redeemScript);
+		this.pubkeyHash = redeemScript.getPubKeyHash();
 	}
 	
 	//TODO encode sign in most-significant bit
@@ -62,6 +78,7 @@ public class CLTVScriptPair {
 
 
 	public Script getPubKeyScript() {
+		assert(pubKeyScript.isPayToScriptHash());
 		return this.pubKeyScript;
 	}
 	
@@ -69,9 +86,43 @@ public class CLTVScriptPair {
 		return this.redeemScript;
 	}
 	
+	public byte[] getPubKeyHash() {
+		return this.pubkeyHash;
+	}
+	
 	private static int log(long expireDate, int base) {
 		return (int) (Math.log(expireDate) / Math.log(base));
 	}
 	
+	
+	private void writeObject(ObjectOutputStream oos)
+			throws IOException {
+		oos.writeObject(redeemScript.getProgram());
+		oos.writeObject(pubKeyScript.getProgram());
+		oos.writeObject(pubkeyHash);
+	}
+	
+	private void readObject(ObjectInputStream ois)
+			throws ClassNotFoundException, IOException {
+		this.redeemScript = new Script((byte[]) ois.readObject());
+		this.pubKeyScript = new Script((byte[]) ois.readObject());
+		this.pubkeyHash = (byte[]) ois.readObject();
+		
+	}
+	
+	//our sigScript of an p2sh-Output needs to append the signature first, than the redeem script
+	public Script calculateSigScript(Transaction tx, int inOffset, Wallet w) {
+		assert(inOffset >= 0);
+		//get key by pubkeyhash from wallet
+		ECKey key = w.findKeyFromPubHash(this.pubkeyHash);
+		TransactionSignature ts = tx.calculateSignature(inOffset, key, redeemScript, SigHash.ALL, false);
+		ScriptBuilder sb = new ScriptBuilder();
+		byte[] sigEncoded = ts.encodeToDER();
+		sb.data(sigEncoded);
+		sb.data(redeemScript.getProgram());
+		
+		
+		return sb.build();
+	}
 	
 }

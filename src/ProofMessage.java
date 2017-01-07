@@ -33,6 +33,8 @@ public class ProofMessage implements Serializable {
 	private static final long serialVersionUID = 1L;
 	private String filePath;
 	private List<Transaction> validationPath;
+	private CLTVScriptPair sp;
+	
 	public void setValidationPath(List<Transaction> validationPath) {
 		this.validationPath = validationPath;
 	}
@@ -64,6 +66,7 @@ public class ProofMessage implements Serializable {
 	//use certain proof message file
 	public ProofMessage(String path) {
 		//determines the corresponding output within the the mix txs
+		this.sp = null;
 		this.validationPath = new ArrayList<Transaction>();
 		this.outputIndices = new ArrayList<Integer>();
 		this.filePath = path;
@@ -126,9 +129,10 @@ public class ProofMessage implements Serializable {
 		//		isNymNotSpend() && isNymTxInBlockChain();
 	}
 	
-	public void addTransaction(Transaction tx, int index) {
+	public void addTransaction(Transaction tx, int index, CLTVScriptPair sp) {
 		validationPath.add(tx);
 		outputIndices.add(new Integer(index));
+		this.sp = sp;
 	}
 	
 	public Transaction getLastTransaction() {
@@ -156,6 +160,7 @@ public class ProofMessage implements Serializable {
 			throws IOException {
 			    //List<byte[]> txs = new ArrayList<byte[]>();
 			    //List<Integer> intList = new ArrayList<Integer>();
+		oos.writeObject(sp);
 		for(Integer i : this.outputIndices) {
 			oos.writeObject(i);
 		}
@@ -173,6 +178,7 @@ public class ProofMessage implements Serializable {
 		List<Integer> intList = new ArrayList<Integer>();
 		List<Object> l = new ArrayList<Object>();
 		BitcoinSerializer bs = new BitcoinSerializer(MainClass.params, false);
+		this.sp = (CLTVScriptPair) ois.readObject();
 		try {
 			for (;;)
 			{
@@ -216,6 +222,10 @@ public class ProofMessage implements Serializable {
 	public boolean isEmpty() {
 		return this.validationPath.size() == 0;
 		
+	}
+	
+	public CLTVScriptPair getScriptPair() {
+		return this.sp;
 	}
 	
 	@Override

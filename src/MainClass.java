@@ -210,7 +210,7 @@ public class MainClass {
 		try {
 			//generate genesis transaction if our proof is empty
 			if(pm.getValidationPath().size() == 0 && wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
-				genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f);
+				genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f, TimeUnit.MINUTES.toSeconds(0));
 				//TODO register listener before sending tx out, to avoid missing a confidence change
 				genesisTx.getConfidence().addEventListener(new Listener() {
 
@@ -281,7 +281,8 @@ public class MainClass {
 	
 	//TODO refactor this out into an seperate class, and split into generating transaction
 	// and sending of the transaction
-	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm, File f) throws InsufficientMoneyException {
+	//@param lockTime how long to lock Psynym in seconds
+	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm, File f, long lockTime) throws InsufficientMoneyException {
 		log.info("try generating genesis tx");
 		Transaction tx = new Transaction(params);
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
@@ -297,7 +298,8 @@ public class MainClass {
 		
 		//add pseudonym output
 		ECKey psnymKey = new ECKey();
-		Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
+		long unixTime = System.currentTimeMillis() / 1000L;
+		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime);
 		w.importKey(psnymKey);
 		
 		Coin suffInptValue = Coin.ZERO;
@@ -313,8 +315,8 @@ public class MainClass {
 			suffInptValue = suffInptValue.add(next.getValue());
 			tx.addInput(next);
 		}
-				
-		tx.addOutput(new TransactionOutput(params, tx, PSNYMVALUE, nymAdrs));
+		//create p2sh output, for possibility of freezing funds to prove it is utxo
+		tx.addOutput(new TransactionOutput(params, tx, PSNYMVALUE, sp.getPubKeyScript().getProgram()));
 		
 		//TODO add change, for know we add everything except PoB and fees to the psnym
 		ECKey changeKey = new ECKey();
@@ -347,7 +349,7 @@ public class MainClass {
 		ListenableFuture<Transaction> future = a.broadcast();
 		try {
 			Transaction b = future.get();
-			pm.addTransaction(b,1);
+			pm.addTransaction(b,1, sp);
 			pm.writeToFile();
 		} catch (InterruptedException | ExecutionException e) {
 			// TODO Auto-generated catch block

@@ -128,7 +128,8 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		}
 		try {
 			result.broadcastComplete.get();
-			pm.addTransaction(result.tx, 1);
+			//TODO insert the script pair, after we changed the broadcast announcement script type
+			pm.addTransaction(result.tx, 1, null);
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
