@@ -33,6 +33,7 @@ public class ProofMessage implements Serializable {
 	private static final long serialVersionUID = 1L;
 	private String filePath;
 	private List<Transaction> validationPath;
+	private List<Integer> outputIndices;
 	private CLTVScriptPair sp;
 	
 	public void setValidationPath(List<Transaction> validationPath) {
@@ -55,7 +56,7 @@ public class ProofMessage implements Serializable {
 		return outputIndices;
 	}
 
-	private List<Integer> outputIndices;
+	
 	
 	//default file is proofmessage.pm
 	//TODO use config file for specification of proofmessage filename
@@ -66,7 +67,7 @@ public class ProofMessage implements Serializable {
 	//use certain proof message file
 	public ProofMessage(String path) {
 		//determines the corresponding output within the the mix txs
-		this.sp = null;
+		this.sp = new CLTVScriptPair();
 		this.validationPath = new ArrayList<Transaction>();
 		this.outputIndices = new ArrayList<Integer>();
 		this.filePath = path;
@@ -79,6 +80,7 @@ public class ProofMessage implements Serializable {
 			   ProofMessage tmp = (ProofMessage) ois.readObject();
 			   this.outputIndices = tmp.outputIndices;
 			   this.validationPath = tmp.validationPath;
+			   this.sp = tmp.sp;
 			   ois.close();
 			   fin.close();
 			   log.info("completed reading in proof message file");
@@ -178,7 +180,7 @@ public class ProofMessage implements Serializable {
 		List<Integer> intList = new ArrayList<Integer>();
 		List<Object> l = new ArrayList<Object>();
 		BitcoinSerializer bs = new BitcoinSerializer(MainClass.params, false);
-		this.sp = (CLTVScriptPair) ois.readObject();
+		Object a = ois.readObject();
 		try {
 			for (;;)
 			{
@@ -217,6 +219,7 @@ public class ProofMessage implements Serializable {
 
 		validationPath = txList;
 		outputIndices = intList;
+		sp = (CLTVScriptPair) a;
 	}
 
 	public boolean isEmpty() {
@@ -232,6 +235,8 @@ public class ProofMessage implements Serializable {
 	public String toString() {
 		String retValue = null;
 		StringBuilder sb = new StringBuilder();
+		sb.append(this.sp.toString());
+		sb.append("----------\n");
 		for(Transaction tx : this.validationPath) {
 			sb.append(tx.toString());
 			sb.append("----------\n");

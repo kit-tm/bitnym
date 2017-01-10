@@ -141,10 +141,12 @@ public class Mixer {
 					rcvdTx.addOutput(newPsyNym);
 					//sign input and send back for signing
 					CLTVScriptPair inSp = ownProof.getScriptPair();
+					assert(inSp != null);
 					rcvdTx.addInput(ownProof.getLastTransactionOutput());
+					rcvdTx.getInput(1).setSequenceNumber(3);
 					rcvdTx.getInput(1).setScriptSig(inSp.calculateSigScript(rcvdTx, 1, w));
 					
-					rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
+					//rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					ptp.setReceiveListener(new ReceiveListener() {
 						
 						@Override
@@ -260,7 +262,6 @@ public class Mixer {
 	}
 
 	private void challengeResponse() {
-		byte[] publicKey = this.w.findKeyFromPubHash(ownProof.getLastTransaction().getOutput(ownProof.getLastOutputIndex()).getAddressFromP2PKHScript(params).getHash160()).getPubKey();
 		//challenge-response to proof ownership of key,? necessary? mix prooves ownership anyway ...
 		//check with adress of transaction
 		//this.ptp.sendMessage(publicKey, mixPartnerAdress);
@@ -340,7 +341,11 @@ public class Mixer {
 		//mix
 		System.out.println("try to mix and construct new proof");
 				final Transaction mixTx = new Transaction(params);
+				long currentUnixTime = System.currentTimeMillis() / 1000L;
+				mixTx.setLockTime(currentUnixTime-(10*60*150));
 				mixTx.addInput(this.ownProof.getLastTransactionOutput());
+				//just needs to be anything else than uint_max, so that nlocktime is really used
+				mixTx.getInput(0).setSequenceNumber(3);
 				// draw random value for decision of output order
 				// security of randomness? probably not a big thing
 				Random r = new Random();
@@ -353,6 +358,7 @@ public class Mixer {
 				long unixTime = System.currentTimeMillis() / 1000L;
 				//add wished lock time
 				final CLTVScriptPair inSp = ownProof.getScriptPair();
+				assert(inSp != null);
 				//TODO add wished locktime
 				final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime);
 				//TODO compute the right value as (input1 + input2 - fee)/2
@@ -395,7 +401,7 @@ public class Mixer {
 
 							System.out.println(rcvdTx);
 							System.out.println(ownProof.getLastTransactionOutput());
-							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+							//rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 							//TODO remove transaction if transaction is rejected, maybe just add to proof message only, and commit only when in the blockchain?
 							w.commitTx(rcvdTx);
 							ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);

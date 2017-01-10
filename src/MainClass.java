@@ -53,6 +53,7 @@ import edu.kit.tm.ptp.PTP;
 
 public class MainClass {
 	
+	
 	private static final Logger log = LoggerFactory.getLogger(MainClass.class);
 	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
 	private static Coin PSNYMVALUE = Coin.valueOf(200000);
@@ -299,7 +300,9 @@ public class MainClass {
 		//add pseudonym output
 		ECKey psnymKey = new ECKey();
 		long unixTime = System.currentTimeMillis() / 1000L;
-		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime);
+		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime-(10*60*300));
+		System.out.println(sp.toString());
+		assert(sp != null);
 		w.importKey(psnymKey);
 		
 		Coin suffInptValue = Coin.ZERO;

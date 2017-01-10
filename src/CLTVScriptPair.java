@@ -4,6 +4,7 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Transaction;
@@ -30,6 +31,10 @@ import org.bitcoinj.wallet.Wallet;
 //spending those p2sh outputs
 public class CLTVScriptPair implements Serializable {
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	private static final int LOCKTIME_TRESHOLD = 500000000;
 	private Script pubKeyScript;
 	private Script redeemScript;
@@ -39,6 +44,10 @@ public class CLTVScriptPair implements Serializable {
 		this.pubKeyScript = a;
 		this.redeemScript = b;
 		this.pubkeyHash = b.getPubKeyHash();
+	}
+	
+	CLTVScriptPair() {
+		
 	}
 	
 	
@@ -62,18 +71,26 @@ public class CLTVScriptPair implements Serializable {
 		this.redeemScript = sb.build();
 		
 		this.pubKeyScript = ScriptBuilder.createP2SHOutputScript(redeemScript);
-		this.pubkeyHash = redeemScript.getPubKeyHash();
+		this.pubkeyHash = newPsynymKey.getPubKeyHash();
 	}
 	
 	//TODO encode sign in most-significant bit
 	//checklocktimeverify has a special format, encode this into a bytearray to add to the script
-	private byte[] encodeExpireDate(long expireDate) {
+	private static byte[] encodeExpireDate(long expireDate) {
 		int numOfBits = CLTVScriptPair.log(expireDate, 2);
-		int numOfBytes = CLTVScriptPair.log(numOfBits, 8);
-		ByteBuffer b = ByteBuffer.allocate(numOfBytes);
+		System.out.println("numofbits" + numOfBits);
+		int numOfBytes = (int) Math.ceil((double) numOfBits / 8.0);
+		assert(numOfBytes >= 1 && numOfBytes <= 5); //see implementation of time formati in op_checklocktimeverify
+		System.out.println("numOfBytes " + numOfBytes);
+		ByteBuffer b = ByteBuffer.allocate(numOfBytes+1);
 		b.order(ByteOrder.LITTLE_ENDIAN);
-		b.putLong(expireDate);
-		return null;
+		b.put((byte) numOfBytes);
+		for(int i=0; i < numOfBytes; i++) {
+			byte expireB = (byte) ((expireDate & (0x000000FFL << i*8)) >> i*8);
+			b.put(expireB);
+		}
+		System.out.println(Arrays.toString(b.array()));
+		return b.array();
 	}
 
 
@@ -90,8 +107,9 @@ public class CLTVScriptPair implements Serializable {
 		return this.pubkeyHash;
 	}
 	
+	//TODO use other function
 	private static int log(long expireDate, int base) {
-		return (int) (Math.log(expireDate) / Math.log(base));
+		return (int) ((Math.log(expireDate) / Math.log(base)) + 1);
 	}
 	
 	
@@ -106,8 +124,7 @@ public class CLTVScriptPair implements Serializable {
 			throws ClassNotFoundException, IOException {
 		this.redeemScript = new Script((byte[]) ois.readObject());
 		this.pubKeyScript = new Script((byte[]) ois.readObject());
-		this.pubkeyHash = (byte[]) ois.readObject();
-		
+		this.pubkeyHash = (byte[]) ois.readObject();		
 	}
 	
 	//our sigScript of an p2sh-Output needs to append the signature first, than the redeem script
@@ -123,6 +140,19 @@ public class CLTVScriptPair implements Serializable {
 		
 		
 		return sb.build();
+	}
+	
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+
+		if((pubKeyScript != null) && (redeemScript != null)) {
+			sb.append(pubKeyScript.toString());
+			sb.append(redeemScript.toString());
+		} else {
+			return "";
+		}
+		return sb.toString();
 	}
 	
 }
