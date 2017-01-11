@@ -300,7 +300,7 @@ public class MainClass {
 		//add pseudonym output
 		ECKey psnymKey = new ECKey();
 		long unixTime = System.currentTimeMillis() / 1000L;
-		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime-(10*60*300));
+		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime-(10*60*500));
 		System.out.println(sp.toString());
 		assert(sp != null);
 		w.importKey(psnymKey);

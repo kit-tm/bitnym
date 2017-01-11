@@ -53,6 +53,7 @@ public class CLTVScriptPair implements Serializable {
 	
 	//TODO compute expire date maybe in this class, instead of letting the caller doing the work?
 	//TODO compute unix time 
+	//TODO change the format to match p2pk as p2pkh doesn't seem useful here
 	CLTVScriptPair(ECKey newPsynymKey, long expireDate) {
 		ScriptBuilder sb = new ScriptBuilder();
 		
@@ -82,9 +83,9 @@ public class CLTVScriptPair implements Serializable {
 		int numOfBytes = (int) Math.ceil((double) numOfBits / 8.0);
 		assert(numOfBytes >= 1 && numOfBytes <= 5); //see implementation of time formati in op_checklocktimeverify
 		System.out.println("numOfBytes " + numOfBytes);
-		ByteBuffer b = ByteBuffer.allocate(numOfBytes+1);
+		ByteBuffer b = ByteBuffer.allocate(numOfBytes);
 		b.order(ByteOrder.LITTLE_ENDIAN);
-		b.put((byte) numOfBytes);
+		//b.put((byte) numOfBytes);
 		for(int i=0; i < numOfBytes; i++) {
 			byte expireB = (byte) ((expireDate & (0x000000FFL << i*8)) >> i*8);
 			b.put(expireB);
@@ -134,8 +135,10 @@ public class CLTVScriptPair implements Serializable {
 		ECKey key = w.findKeyFromPubHash(this.pubkeyHash);
 		TransactionSignature ts = tx.calculateSignature(inOffset, key, redeemScript, SigHash.ALL, false);
 		ScriptBuilder sb = new ScriptBuilder();
-		byte[] sigEncoded = ts.encodeToDER();
+		byte[] sigEncoded = ts.encodeToBitcoin();
 		sb.data(sigEncoded);
+		assert(TransactionSignature.isEncodingCanonical(sigEncoded));
+		sb.data(key.getPubKey());
 		sb.data(redeemScript.getProgram());
 		
 		

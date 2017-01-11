@@ -342,6 +342,7 @@ public class Mixer {
 		System.out.println("try to mix and construct new proof");
 				final Transaction mixTx = new Transaction(params);
 				long currentUnixTime = System.currentTimeMillis() / 1000L;
+				System.out.println("set locktime of tx to " + String.valueOf(currentUnixTime-(10*60*150)));
 				mixTx.setLockTime(currentUnixTime-(10*60*150));
 				mixTx.addInput(this.ownProof.getLastTransactionOutput());
 				//just needs to be anything else than uint_max, so that nlocktime is really used
@@ -401,7 +402,7 @@ public class Mixer {
 
 							System.out.println(rcvdTx);
 							System.out.println(ownProof.getLastTransactionOutput());
-							//rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 							//TODO remove transaction if transaction is rejected, maybe just add to proof message only, and commit only when in the blockchain?
 							w.commitTx(rcvdTx);
 							ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
