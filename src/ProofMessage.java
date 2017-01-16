@@ -268,5 +268,13 @@ public class ProofMessage implements Serializable {
 		}
 		
 	}
+	
+	public void setFilePath(String fp) {
+		this.filePath = fp;
+	}
+	
+	public String getFilePath() {
+		return this.filePath;
+	}
 
 }
