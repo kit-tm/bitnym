@@ -83,6 +83,7 @@ public class Mixer {
 		this.ownProof = pm;
 		this.w = w;
 		this.params = params;
+		this.pg = pg;
 	}
 	
 	public void passiveMix(byte[] arg0) {
@@ -127,7 +128,7 @@ public class Mixer {
 				Address nymAdrs = new Address(params, newPsnymKey.getPubKeyHash());
 				w.importKey(newPsnymKey);
 				long unixTime = System.currentTimeMillis() / 1000L;
-				final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, unixTime);
+				final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, unixTime-(10*60*150));
 				Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
 				TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 				rcvdTx.addOutput(newPsyNym);
@@ -147,14 +148,20 @@ public class Mixer {
 							//deserialize tx, check rcvd Tx, then sign and broadcast
 							
 							Transaction lastTxVersion = deserializeTransaction(arg0);
-							lastTxVersion.getInput(1).setScriptSig(inSp.calculateSigScript(rcvdTx, 1, w));
+							lastTxVersion.getInput(1).setScriptSig(inSp.calculateSigScript(lastTxVersion, 1, w));
+							lastTxVersion.getInput(1).verify(ownProof.getLastTransactionOutput());
 							assert(lastTxVersion != null);
 							broadcastMixTx(outputOrder, outSp,lastTxVersion, 1);
 							
 						}
 					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
-					
+					try {
+						TimeUnit.MINUTES.sleep(2);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 					
 
 				} else if(outputOrder == 1) {
@@ -164,6 +171,7 @@ public class Mixer {
 					//sign input and send back for signing
 
 					rcvdTx.getInput(1).setScriptSig(inSp.calculateSigScript(rcvdTx, 1, w));
+					rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					
 					//rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					ptp.setReceiveListener(new ReceiveListener() {
@@ -176,6 +184,12 @@ public class Mixer {
 						
 					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
+					try {
+						TimeUnit.MINUTES.sleep(2);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 				}
 
 			}
@@ -344,7 +358,7 @@ public class Mixer {
 				// security of randomness? probably not a big thing
 				Random r = new Random();
 				final int outputOrder;// = r.nextInt(2);
-				outputOrder = 0;
+				outputOrder = 1;
 				//set the value later on
 				//TODO refactor duplicate code within mixAndConstructNewProof and passiveMix
 				ECKey psnymKey = new ECKey();
@@ -355,7 +369,7 @@ public class Mixer {
 				final CLTVScriptPair inSp = ownProof.getScriptPair();
 				assert(inSp != null);
 				//TODO add wished locktime
-				final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime);
+				final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime-(10*60*150));
 				//TODO compute the right value as (input1 + input2 - fee)/2
 				Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
 				final TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
@@ -378,12 +392,12 @@ public class Mixer {
 							//sign transaction and send it to the network
 
 							rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
+							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 							
 							//this method just does rudimentary checks, does not check whether inputs are already spent for example
 							rcvdTx.verify();
 
 							System.out.println(ownProof.getLastTransactionOutput());
-							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 							//TODO remove transaction if transaction is rejected, maybe just add to proof message only, and commit only when in the blockchain?
 							broadcastMixTx(outputOrder, outSp, rcvdTx, 0);
 							
@@ -415,6 +429,7 @@ public class Mixer {
 							checkTx(mixTx, penFinalTx);
 							penFinalTx.addOutput(newPsyNym);
 							penFinalTx.getInput(0).setScriptSig(inSp.calculateSigScript(penFinalTx, 0, w));
+							penFinalTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 							ptp.setReceiveListener(new ReceiveListener() {
 								
 								@Override
@@ -423,11 +438,22 @@ public class Mixer {
 								}
 							});
 							ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
+							try {
+								TimeUnit.MINUTES.sleep(2);
+							} catch (InterruptedException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
 							
 						}
 					});
 					this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
-
+					try {
+						TimeUnit.MINUTES.sleep(2);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 				}
 	}
 	
@@ -502,6 +528,7 @@ public class Mixer {
 			final CLTVScriptPair outSp, byte[] arg0, int inputOrder, int outputOrder) {
 		System.out.println("deserialize finished transaction");
 		Transaction finishedTx = deserializeTransaction(arg0);
+		finishedTx.verify();
 		System.out.println(finishedTx);
 		w.commitTx(finishedTx);
 		if(inputOrder != outputOrder) {
