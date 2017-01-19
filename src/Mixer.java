@@ -48,6 +48,10 @@ import edu.kit.tm.ptp.SendListener.State;
 
 //TODO check which broadcastannouncement read and accepted for mixing, and check whether we want to mix this nym or not
 
+//TODO refactor into one branch, mix outputs, send back for signing, and sign ourselves, less code => less bugs
+//TODO close ptp after mixing
+//TODO lock messages to certain .onion adress, after a certain .onion adress is used (when active) or received (when passive)
+
 public class Mixer {
 	private PTP ptp;
 	private Identifier mixPartnerAdress;
@@ -357,8 +361,8 @@ public class Mixer {
 				// draw random value for decision of output order
 				// security of randomness? probably not a big thing
 				Random r = new Random();
-				final int outputOrder;// = r.nextInt(2);
-				outputOrder = 1;
+				final int outputOrder = r.nextInt(2);
+				//outputOrder = 1;
 				//set the value later on
 				//TODO refactor duplicate code within mixAndConstructNewProof and passiveMix
 				ECKey psnymKey = new ECKey();

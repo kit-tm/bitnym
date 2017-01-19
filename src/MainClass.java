@@ -56,7 +56,7 @@ public class MainClass {
 	
 	private static final Logger log = LoggerFactory.getLogger(MainClass.class);
 	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
-	private static Coin PSNYMVALUE = Coin.valueOf(200000);
+	public static Coin PSNYMVALUE = Coin.valueOf(200000);
 	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
 	public static NetworkParameters params;
 
@@ -188,25 +188,13 @@ public class MainClass {
 			e1.printStackTrace();
 		}
 		
-		MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc, wallet);
+		MixPartnerDiscovery mpd = new MixPartnerDiscovery(params, pg, bc, wallet, pm);
 		//bc.addNewBestBlockListener(mpd);
 		
 		pg.addBlocksDownloadedEventListener(mpd);
 		System.out.println("addblocksdownloadedeventlistener");
 		
-//		try {
-//			System.out.println("sendBroadcastAnnouncement");
-//			MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm);
-//		} catch (InsufficientMoneyException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
-//		try {
-//			TimeUnit.MINUTES.sleep(15);
-//		} catch (InterruptedException e1) {
-//			// TODO Auto-generated catch block
-//			e1.printStackTrace();
-//		}
+
 		Transaction genesisTx;
 		try {
 			//generate genesis transaction if our proof is empty
@@ -231,6 +219,30 @@ public class MainClass {
 		} catch (InsufficientMoneyException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		}
+		
+		try {
+			System.out.println("sendBroadcastAnnouncement");
+			for(int i=0; i<50;i++) {
+				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+					TimeUnit.MINUTES.sleep(1);
+				} else {
+					MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm, pg);
+				}
+			}
+		} catch (InsufficientMoneyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		//	try {
+		//		TimeUnit.MINUTES.sleep(15);
+		//	} catch (InterruptedException e1) {
+		//		// TODO Auto-generated catch block
+		//		e1.printStackTrace();
+		//	}
+		catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
 
 		//assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));

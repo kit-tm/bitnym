@@ -44,6 +44,7 @@ public class BroadcastAnnouncement {
 		
 	}
 	
+	//constructs the identifier for the bloom filter together with the announcement data
 	public Script buildScript() {
 		ScriptBuilder sbuilder = new ScriptBuilder();
 		sbuilder = sbuilder.op(ScriptOpCodes.OP_RETURN);
