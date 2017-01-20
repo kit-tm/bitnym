@@ -54,8 +54,10 @@ import edu.kit.tm.ptp.PTP;
 public class MainClass {
 	
 	
+	
 	private static final Logger log = LoggerFactory.getLogger(MainClass.class);
-	private static Coin PROOF_OF_BURN = Coin.valueOf(50000);
+	//TODO move to utility/config class?
+	public static Coin PROOF_OF_BURN = Coin.valueOf(50000);
 	public static Coin PSNYMVALUE = Coin.valueOf(200000);
 	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
 	public static NetworkParameters params;
@@ -266,7 +268,7 @@ public class MainClass {
 						e1.printStackTrace();
 					}
 					//Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
-					Mixer m = new Mixer(ptp, destinationAddress, pm, wallet, params, pg);
+					Mixer m = new Mixer(ptp, destinationAddress, pm, wallet, params, pg, bc);
 
 					m.initiateMix();
 					TimeUnit.MINUTES.sleep(10);
@@ -298,6 +300,7 @@ public class MainClass {
 	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm, File f, long lockTime) throws InsufficientMoneyException {
 		log.info("try generating genesis tx");
 		Transaction tx = new Transaction(params);
+		//TODO refactoring: use smaller string for less tx fees
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
 		if (w.getBalance().isLessThan(PROOF_OF_BURN)) {

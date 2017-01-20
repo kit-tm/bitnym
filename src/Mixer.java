@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.BitcoinSerializer;
+import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
@@ -59,35 +60,39 @@ public class Mixer {
 	private Wallet w;
 	private NetworkParameters params;
 	private PeerGroup pg;
+	private BlockChain bc;
 	
 	//get the onion mix adress from a broadcastannouncement
-	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg) {
+	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
 		this.ptp = ptp;
 		this.mixPartnerAdress = new Identifier(bca.getOnionAdress() + ".onion");
 		this.ownProof = pm;
 		this.w = w;
 		this.params = params;
 		this.pg = pg;
+		this.bc = bc;
 	}
 	
 	
 	//get onionAdress directly
-	public Mixer(PTP ptp, String onionAddress, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg) {
+	public Mixer(PTP ptp, String onionAddress, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
 		this.ptp = ptp;
 		this.mixPartnerAdress = new Identifier(onionAddress);
 		this.ownProof = pm;
 		this.w = w;
 		this.params = params;
 		this.pg = pg;
+		this.bc = bc;
 	}
 	
 	//constructor for just listening
-	public Mixer(PTP ptp, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg) {
+	public Mixer(PTP ptp, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
 		this.ptp = ptp;
 		this.ownProof = pm;
 		this.w = w;
 		this.params = params;
 		this.pg = pg;
+		this.bc = bc;
 	}
 	
 	public void passiveMix(byte[] arg0) {
@@ -111,7 +116,7 @@ public class Mixer {
 		//received serialized proof, so deserialize, and check proof
 		System.out.println("check partner proof");
 		this.partnerProof = (ProofMessage) deserialize(arg0);
-		if(!partnerProof.isValidProof()) {
+		if(!partnerProof.isValidProof(bc)) {
 			System.out.println("proof of mix partner is invalid");
 			return;
 		}
@@ -255,7 +260,7 @@ public class Mixer {
 				partnerProof = (ProofMessage) deserialize(arg0);
 				//check proof
 				System.out.println("check partner proof");
-				if(!partnerProof.isValidProof()) {
+				if(!partnerProof.isValidProof(bc)) {
 					System.out.println("proof of mix partner is invalid");
 					return;
 				}

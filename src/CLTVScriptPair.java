@@ -6,13 +6,16 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
+import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.ECKey;
+import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.Transaction.SigHash;
 import org.bitcoinj.crypto.TransactionSignature;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.script.ScriptOpCodes;
+import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.wallet.Wallet;
 
 /**
@@ -156,6 +159,40 @@ public class CLTVScriptPair implements Serializable {
 			return "";
 		}
 		return sb.toString();
+	}
+
+	//check that the redeem script is the one we defined, not some other
+	public boolean isRedeemScriptRightFormat() {
+		// TODO Auto-generated method stub
+		return false;
+	}
+
+	//check and compare whether the lock time is still bigger than bip113 bitcoin time
+	public boolean isLocked(BlockChain bc) {
+		long challengeLockTime = getLockTime();
+		return challengeLockTime > currentBitcoinBIP113Time(bc);
+	}
+
+	private long currentBitcoinBIP113Time(BlockChain bc) {
+		StoredBlock headBlock = bc.getChainHead();
+		StoredBlock iteratingBlock = headBlock;
+		long[] blockTimeStamps = new long[11];
+		for(int i=0; i < 11; i++) {
+			blockTimeStamps[i] = iteratingBlock.getHeader().getTimeSeconds();
+			try {
+				iteratingBlock = iteratingBlock.getPrev(bc.getBlockStore());
+			} catch (BlockStoreException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		Arrays.sort(blockTimeStamps);
+		return blockTimeStamps[5];
+	}
+
+	private long getLockTime() {
+		byte[] program = redeemScript.getProgram();
+		return ((long) program[1]) + ((long) program[2]) << 8 + ((long) program[3]) << 16 + ((long) program[4]) << 24;
 	}
 	
 }
