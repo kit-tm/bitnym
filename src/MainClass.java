@@ -69,8 +69,7 @@ public class MainClass {
 		//initialize neccessary bitcoinj variables
 		MainClass.params = TestNet3Params.get();
 		
-		log.info("testTestTest");
-		final ProofMessage pm = new ProofMessage();
+		
 
 		PTP ptp = new PTP(System.getProperty("user.dir"));
 		try {
@@ -119,6 +118,7 @@ public class MainClass {
 		}
 		
 		log.info("this is the current proof chain");
+		final ProofMessage pm = new ProofMessage();
 		log.info(pm.toString());
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
 		System.setProperty("socksProxyHost", "127.0.0.1");
@@ -152,13 +152,14 @@ public class MainClass {
 		
 		//downloadpeer.setBloomFilter(filter);
 		//downloadpeer.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
-		javax.swing.Timer t = new javax.swing.Timer( 1000, new ActionListener() {
-			  public void actionPerformed( ActionEvent e ) {
-			    pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
-			    //pg.getDownloadPeer().setBloomFilter(filter);
-			  }
-			});
-		t.start();
+//		javax.swing.Timer t = new javax.swing.Timer( 1000, new ActionListener() {
+//			  public void actionPerformed( ActionEvent e ) {
+//			    pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
+//			    //pg.getDownloadPeer().setBloomFilter(filter);
+//			    //try setbloomfilter(getbloomfilter.insert(magicnumber), cause setbloomfilter causes resend, insert doesn't causes resend
+//			  }
+//			});
+//		t.start();
 		System.out.println("bloom filter assertion");
 	    //pg.getDownloadPeer().setBloomFilter(filter);
 		log.info("insert our broadcast transaction identifier string, into bloom filter of current download peer");
@@ -222,30 +223,30 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
-		try {
-			System.out.println("sendBroadcastAnnouncement");
-			for(int i=0; i<50;i++) {
-				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
-					TimeUnit.MINUTES.sleep(1);
-				} else {
-					MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm, pg);
-				}
-			}
-		} catch (InsufficientMoneyException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+//		
+//		try {
+//			System.out.println("sendBroadcastAnnouncement");
+//			for(int i=0; i<50;i++) {
+//				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+//					TimeUnit.MINUTES.sleep(1);
+//				} else {
+//					MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm, pg);
+//				}
+//			}
+//		} catch (InsufficientMoneyException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 		//	try {
 		//		TimeUnit.MINUTES.sleep(15);
 		//	} catch (InterruptedException e1) {
 		//		// TODO Auto-generated catch block
 		//		e1.printStackTrace();
 		//	}
-		catch (InterruptedException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
+//		catch (InterruptedException e1) {
+//			// TODO Auto-generated catch block
+//			e1.printStackTrace();
+//		}
 
 		//assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 
@@ -286,7 +287,6 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
-		
 		
 		
 		ptp.exit();

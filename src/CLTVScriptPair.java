@@ -190,7 +190,7 @@ public class CLTVScriptPair implements Serializable {
 		return blockTimeStamps[5];
 	}
 
-	private long getLockTime() {
+	public long getLockTime() {
 		byte[] program = redeemScript.getProgram();
 		return ((long) program[1]) + ((long) program[2]) << 8 + ((long) program[3]) << 16 + ((long) program[4]) << 24;
 	}

@@ -260,10 +260,12 @@ public class Mixer {
 				partnerProof = (ProofMessage) deserialize(arg0);
 				//check proof
 				System.out.println("check partner proof");
-				if(!partnerProof.isValidProof(bc)) {
-					System.out.println("proof of mix partner is invalid");
-					return;
-				}
+//				if(!partnerProof.isValidProof(bc)) {
+//					System.out.println("proof of mix partner is invalid");
+//					return;
+//				}
+				//TODO remove this, only for testing
+				partnerProof.isNymTxInBlockChain(params, bc, pg);
 				challengeResponse();
 				
 			}

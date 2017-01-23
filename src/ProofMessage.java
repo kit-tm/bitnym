@@ -10,17 +10,43 @@ import java.io.Serializable;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import javax.annotation.Nullable;
 
 import org.bitcoinj.core.BitcoinSerializer;
+import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
+import org.bitcoinj.core.BloomFilter;
+import org.bitcoinj.core.BloomFilter.BloomUpdate;
+import org.bitcoinj.core.FilteredBlock;
+import org.bitcoinj.core.GetDataMessage;
+import org.bitcoinj.core.Message;
 import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.Peer;
+import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.ProtocolException;
+import org.bitcoinj.core.Sha256Hash;
+import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.Transaction;
+import org.bitcoinj.core.TransactionConfidence;
+import org.bitcoinj.core.TransactionConfidence.ConfidenceType;
+import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionOutput;
+import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
+import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
+import org.bitcoinj.core.listeners.PreMessageReceivedEventListener;
 import org.bitcoinj.script.ScriptBuilder;
+import org.bitcoinj.store.BlockStoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 
 
 
@@ -37,6 +63,7 @@ public class ProofMessage implements Serializable {
 	private List<Transaction> validationPath;
 	private List<Integer> outputIndices;
 	private CLTVScriptPair sp;
+	private int appearedInChainheight;
 	
 	public void setValidationPath(List<Transaction> validationPath) {
 		this.validationPath = validationPath;
@@ -83,6 +110,8 @@ public class ProofMessage implements Serializable {
 			   this.outputIndices = tmp.outputIndices;
 			   this.validationPath = tmp.validationPath;
 			   this.sp = tmp.sp;
+			   this.appearedInChainheight = tmp.appearedInChainheight;
+			   //TODO register listener here, not at readobject
 			   ois.close();
 			   fin.close();
 			   log.info("completed reading in proof message file");
@@ -166,11 +195,107 @@ public class ProofMessage implements Serializable {
 		return true;
 	}
 	
-	public boolean isNymTxInBlockChain() {
+	//check the locktime to know which filteredblocks to request
+	//modify the bloomfilter from downloadpeer to include the tx hash of the tx we want to check
+	//then check merkle branch 
+	public boolean isNymTxInBlockChain(NetworkParameters params, BlockChain bc, PeerGroup pg) {
 		//get filtered block with transaction and check merkel tree
-		return false;
+		//insert tx hash
+		//pg.getDownloadPeer().setBloomFilter(pg.getDownloadPeer().getBloomFilter().insert(getLastTransaction()));
+//		Peer dpeer = pg.getDownloadPeer();
+//		
+//		StoredBlock head = bc.getChainHead();
+//		StoredBlock i = head;
+//		
+//		while(i.getHeader().getTimeSeconds() > sp.getLockTime()) {
+//			//dpeer.sendMessage(arg0);
+//			try {
+//				i = i.getPrev(bc.getBlockStore());
+//			} catch (BlockStoreException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+//		}
+		System.out.println("check that transaction is in blockchain");
+		Peer dpeer = pg.getDownloadPeer();
+		byte[] txhash = getLastTransaction().getHash().getBytes();
+		//BloomFilter filter = dpeer.getBloomFilter();
+		final BloomFilter filter = new BloomFilter(100, 0.05, 0, BloomUpdate.UPDATE_ALL);
+		filter.insert(txhash);
+		filter.insert(sp.getPubKeyHash());
+		filter.insert(sp.getRedeemScript().getProgram());
+		filter.insert(sp.getPubKeyScript().getProgram());
+		filter.insert(getLastTransaction().getInput(0).getOutpoint().unsafeBitcoinSerialize());
+		filter.applyAndUpdate(getLastTransaction());
+		System.out.println("updateflag " + dpeer.getBloomFilter().getUpdateFlag());
+		for(Peer p : pg.getConnectedPeers()) {
+			p.setBloomFilter(filter);
+		}
+		dpeer.setBloomFilter(filter);
+		GetDataMessage msg = new GetDataMessage(params);
+		assert(appearedInChainheight > 0);
+		msg.addFilteredBlock(getBlockHashByHeight(bc, appearedInChainheight));
+		dpeer.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
+			
+			@Override
+			public void onBlocksDownloaded(Peer arg0, Block arg1,
+					@Nullable FilteredBlock arg2, int arg3) {
+				System.out.println("execute onblocksdownloaded listener on block + " + arg2.getBlockHeader().getHashAsString());
+				Map<Sha256Hash, Transaction> asscTxs = arg2.getAssociatedTransactions();
+				for(Transaction tx : asscTxs.values()) {
+					System.out.println("within assctxsvalues of download block");
+					System.out.println(tx);
+				}
+				
+			}
+		});
+		dpeer.sendMessage(msg);
+		System.out.println("send getdatamessage to verify tx is in blockchain");
+		ListenableFuture<Block> future = dpeer.getBlock(getBlockHashByHeight(bc, appearedInChainheight));
+		try {
+			Block blk = future.get();
+			System.out.println("received requested block, search the tx to verify");
+			for(Transaction tx : blk.getTransactions()) {
+				if(Arrays.equals(tx.getHash().getBytes(), txhash)) {
+					System.out.println("found the transaction!");
+				}
+			}
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (ExecutionException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
+		try {
+			TimeUnit.MINUTES.sleep(2);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return true;
 	}
 	
+	//neither blockchain nor blockstore allow retrieval of a block by height
+	//so we need to do this ourselves
+	private Sha256Hash getBlockHashByHeight(BlockChain bc, int appearedInChainheight2) {
+		int bestchainheight = bc.getBestChainHeight();
+		StoredBlock block = bc.getChainHead();
+		assert(block != null);
+		for(int i=0; i < bestchainheight-appearedInChainheight2; i++) {
+			try {
+				System.out.println("iteration: " + i);
+				assert(block != null);
+				block = block.getPrev(bc.getBlockStore());
+			} catch (BlockStoreException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		return block.getHeader().getHash();
+	}
+
 	public boolean isValidProof(BlockChain bc) {
 		return true;
 		//return isValidPath() && isValidGPTx() &&
@@ -179,14 +304,28 @@ public class ProofMessage implements Serializable {
 	
 	//when we want to create a mixtx, the outputs are not locked, so we do not know for sure whether the outputs are utxo
 	//until we try to broadcast the mixtx
-	public boolean isProbablyValid() {
-		return isValidPath() && isValidGPTx() && isNymTxInBlockChain();
+	public boolean isProbablyValid(NetworkParameters params, BlockChain bc, PeerGroup pg) {
+		return isValidPath() && isValidGPTx() && isNymTxInBlockChain(params, bc, pg);
 	}
 	
-	public void addTransaction(Transaction tx, int index, CLTVScriptPair sp) {
+	public void addTransaction(final Transaction tx, int index, CLTVScriptPair sp) {
 		validationPath.add(tx);
 		outputIndices.add(new Integer(index));
 		this.sp = sp;
+		this.appearedInChainheight = 0; 
+		tx.getConfidence().addEventListener(new Listener() {
+			
+			@Override
+			public void onConfidenceChanged(TransactionConfidence arg0,
+					ChangeReason arg1) {
+				if(arg1.equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+					appearedInChainheight = arg0.getAppearedAtChainHeight();
+					tx.getConfidence().removeEventListener(this);
+					System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
+				}
+				
+			}
+		});
 	}
 	
 	public Transaction getLastTransaction() {
@@ -214,6 +353,8 @@ public class ProofMessage implements Serializable {
 			throws IOException {
 			    //List<byte[]> txs = new ArrayList<byte[]>();
 			    //List<Integer> intList = new ArrayList<Integer>();
+		System.out.println("serialize proof message, appearedinchainheight is " + this.appearedInChainheight);
+		oos.writeInt(appearedInChainheight);
 		oos.writeObject(sp);
 		for(Integer i : this.outputIndices) {
 			oos.writeObject(i);
@@ -232,6 +373,9 @@ public class ProofMessage implements Serializable {
 		List<Integer> intList = new ArrayList<Integer>();
 		List<Object> l = new ArrayList<Object>();
 		BitcoinSerializer bs = new BitcoinSerializer(MainClass.params, false);
+		
+		appearedInChainheight = ois.readInt();
+
 		Object a = ois.readObject();
 		try {
 			for (;;)
@@ -272,6 +416,29 @@ public class ProofMessage implements Serializable {
 		validationPath = txList;
 		outputIndices = intList;
 		sp = (CLTVScriptPair) a;
+		if(appearedInChainheight == 0 && validationPath.size() > 0) {
+			//if appearedInHeight isn't set yet, register listener, which sets at it, when the tx
+			//appears in the block chain
+			if(getLastTransaction().hasConfidence() && getLastTransaction().getConfidence().getConfidenceType().equals(ConfidenceType.BUILDING)) {
+				appearedInChainheight = getLastTransaction().getConfidence().getAppearedAtChainHeight();
+				System.out.println("set appeared in chainheight without listener to " + appearedInChainheight);
+			} else {
+				System.out.println("has no confidence, so set confidence listener to set the appeared in chainheight later on");
+				getLastTransaction().getConfidence().addEventListener(new Listener() {
+
+					@Override
+					public void onConfidenceChanged(TransactionConfidence arg0,
+							ChangeReason arg1) {
+						if(arg1.equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+							appearedInChainheight = arg0.getAppearedAtChainHeight();
+							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
+							getLastTransaction().getConfidence().removeEventListener(this);
+						}
+
+					}
+				});
+			}
+		}
 	}
 
 	public boolean isEmpty() {

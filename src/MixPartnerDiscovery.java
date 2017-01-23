@@ -177,7 +177,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		System.out.println("received block");
 		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 		for(Transaction tx : assocTxs.values()) {
-			System.out.println(tx);
+			System.out.println("from within mixpartner discovery " + tx);
 			//TODO getPubKey might lead to an exception, use try-catch
 			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(0).getScriptBytes())
 					&& wallet.findKeyFromPubKey(tx.getInput(0).getScriptSig().getPubKey()) == null) {
