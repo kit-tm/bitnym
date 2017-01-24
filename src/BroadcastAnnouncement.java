@@ -31,14 +31,14 @@ public class BroadcastAnnouncement {
 	public static boolean isBroadcastAnnouncementScript(byte[] script) {
 		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(script));
 		//TODO expand this to full verification, e.g. parsing the script
-		if(script[1] == 0x04) {
-			for(int i=0; i<4; i++) {
-				if(script[2+i] != magicNumber[i]) {
-					return false;
-				}
+		if(script[1] != 0x04) {
+			return false;
+		}
+		for(int i=0; i<4; i++) {
+			if(script[2+i] != magicNumber[i]) {
+				return false;
 			}
 		}
-		
 		
 		return true;
 		

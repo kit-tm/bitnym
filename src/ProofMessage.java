@@ -27,6 +27,7 @@ import org.bitcoinj.core.FilteredBlock;
 import org.bitcoinj.core.GetDataMessage;
 import org.bitcoinj.core.Message;
 import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.PartialMerkleTree;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.ProtocolException;
@@ -41,6 +42,7 @@ import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
 import org.bitcoinj.core.listeners.PreMessageReceivedEventListener;
 import org.bitcoinj.script.ScriptBuilder;
+import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -200,81 +202,77 @@ public class ProofMessage implements Serializable {
 	//then check merkle branch 
 	public boolean isNymTxInBlockChain(NetworkParameters params, BlockChain bc, PeerGroup pg) {
 		//get filtered block with transaction and check merkel tree
-		//insert tx hash
-		//pg.getDownloadPeer().setBloomFilter(pg.getDownloadPeer().getBloomFilter().insert(getLastTransaction()));
-//		Peer dpeer = pg.getDownloadPeer();
-//		
-//		StoredBlock head = bc.getChainHead();
-//		StoredBlock i = head;
-//		
-//		while(i.getHeader().getTimeSeconds() > sp.getLockTime()) {
-//			//dpeer.sendMessage(arg0);
-//			try {
-//				i = i.getPrev(bc.getBlockStore());
-//			} catch (BlockStoreException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-//		}
+		final BlockStore blockstore = bc.getBlockStore();
 		System.out.println("check that transaction is in blockchain");
-		Peer dpeer = pg.getDownloadPeer();
-		byte[] txhash = getLastTransaction().getHash().getBytes();
-		//BloomFilter filter = dpeer.getBloomFilter();
-		final BloomFilter filter = new BloomFilter(100, 0.05, 0, BloomUpdate.UPDATE_ALL);
-		filter.insert(txhash);
-		filter.insert(sp.getPubKeyHash());
-		filter.insert(sp.getRedeemScript().getProgram());
-		filter.insert(sp.getPubKeyScript().getProgram());
+		final Peer dpeer = pg.getDownloadPeer();
+		BloomFilter filter = dpeer.getBloomFilter();
+
 		filter.insert(getLastTransaction().getInput(0).getOutpoint().unsafeBitcoinSerialize());
-		filter.applyAndUpdate(getLastTransaction());
-		System.out.println("updateflag " + dpeer.getBloomFilter().getUpdateFlag());
-		for(Peer p : pg.getConnectedPeers()) {
-			p.setBloomFilter(filter);
-		}
+
 		dpeer.setBloomFilter(filter);
 		GetDataMessage msg = new GetDataMessage(params);
 		assert(appearedInChainheight > 0);
 		msg.addFilteredBlock(getBlockHashByHeight(bc, appearedInChainheight));
+		final Object monitor = new Object();
+		//listener forces monitorstate to be final, so we use a wrapper class, to still be able to modify it
+		class BooleanWrapper {
+			boolean monitorState = false;
+			
+			void setMonitorState(boolean b) {
+				this.monitorState = b;
+			}
+			
+			boolean getMonitorState() {
+				return this.monitorState;
+			}
+		}
+		final BooleanWrapper monState = new BooleanWrapper();
+		final BooleanWrapper isTxInBlockchain = new BooleanWrapper();
 		dpeer.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
 			
 			@Override
 			public void onBlocksDownloaded(Peer arg0, Block arg1,
 					@Nullable FilteredBlock arg2, int arg3) {
 				System.out.println("execute onblocksdownloaded listener on block + " + arg2.getBlockHeader().getHashAsString());
-				Map<Sha256Hash, Transaction> asscTxs = arg2.getAssociatedTransactions();
-				for(Transaction tx : asscTxs.values()) {
-					System.out.println("within assctxsvalues of download block");
-					System.out.println(tx);
+//				Map<Sha256Hash, Transaction> asscTxs = arg2.getAssociatedTransactions();
+//				for(Transaction tx : asscTxs.values()) {
+//					if(tx.equals(getLastTransaction())) {
+//						//check merkle tree, to make sure it is in the block
+//					}
+//				}
+				List<Sha256Hash> matchedHashesOut = new ArrayList<>();
+				PartialMerkleTree tree = arg2.getPartialMerkleTree();
+				Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
+				try {
+					if(matchedHashesOut.contains(getLastTransaction().getHash()) &&
+							merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()) &&
+							merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
+						isTxInBlockchain.setMonitorState(true);
+					}
+				} catch (BlockStoreException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 				
+				synchronized (monitor) {
+					monState.setMonitorState(false);
+					monitor.notifyAll(); // unlock again
+				}
+				dpeer.removeBlocksDownloadedEventListener(this);
 			}
 		});
 		dpeer.sendMessage(msg);
 		System.out.println("send getdatamessage to verify tx is in blockchain");
-		ListenableFuture<Block> future = dpeer.getBlock(getBlockHashByHeight(bc, appearedInChainheight));
-		try {
-			Block blk = future.get();
-			System.out.println("received requested block, search the tx to verify");
-			for(Transaction tx : blk.getTransactions()) {
-				if(Arrays.equals(tx.getHash().getBytes(), txhash)) {
-					System.out.println("found the transaction!");
-				}
-			}
-		} catch (InterruptedException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		} catch (ExecutionException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
 		
-		try {
-			TimeUnit.MINUTES.sleep(2);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		monState.setMonitorState(true);
+		while(monState.getMonitorState()) {
+			synchronized (monitor) {
+				try {
+					monitor.wait();
+				} catch (Exception e) {}
+			}
 		}
-		return true;
+		return isTxInBlockchain.getMonitorState();
 	}
 	
 	//neither blockchain nor blockstore allow retrieval of a block by height

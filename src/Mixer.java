@@ -265,7 +265,10 @@ public class Mixer {
 //					return;
 //				}
 				//TODO remove this, only for testing
-				partnerProof.isNymTxInBlockChain(params, bc, pg);
+				if(!partnerProof.isNymTxInBlockChain(params, bc, pg)) {
+					System.out.println("tx is not in blockchain");
+					return;
+				}
 				challengeResponse();
 				
 			}
@@ -366,7 +369,7 @@ public class Mixer {
 				//just needs to be anything else than uint_max, so that nlocktime is really used
 				mixTx.getInput(0).setSequenceNumber(3);
 				// draw random value for decision of output order
-				// security of randomness? probably not a big thing
+				// TODO use secure random bit
 				Random r = new Random();
 				final int outputOrder = r.nextInt(2);
 				//outputOrder = 1;
