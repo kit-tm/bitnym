@@ -46,7 +46,6 @@ import edu.kit.tm.ptp.SendListener;
 import edu.kit.tm.ptp.SendListener.State;
 
 //TODO commitTx with complete tx send by mixpartner needs to be called
-//TODO implement other branch case for different output order
 
 //TODO check which broadcastannouncement read and accepted for mixing, and check whether we want to mix this nym or not
 
@@ -558,11 +557,11 @@ public class Mixer {
 				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					return;
 				}
-				if(arg0.getDepthInBlocks() == 1) {
+				if(arg0.getDepthInBlocks() >= 1) {
 					//add to proof message and write to file
 					System.out.println("confidence of mix tx is 1");
 
-					//TODO remove eventlistener
+					rcvdTx.getConfidence().removeEventListener(this);
 				}
 			}
 		});
@@ -571,7 +570,7 @@ public class Mixer {
 	private void commitRcvdFinalTx(
 			final CLTVScriptPair outSp, byte[] arg0, int inputOrder, int outputOrder) {
 		System.out.println("deserialize finished transaction");
-		Transaction finishedTx = deserializeTransaction(arg0);
+		final Transaction finishedTx = deserializeTransaction(arg0);
 		finishedTx.verify();
 		System.out.println(finishedTx);
 		w.commitTx(finishedTx);
@@ -592,11 +591,11 @@ public class Mixer {
 				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					return;
 				}
-				if(arg0.getDepthInBlocks() == 1) {
+				if(arg0.getDepthInBlocks() >= 1) {
 					//add to proof message and write to file
-					System.out.println("confidence of mix tx is 1");
+					System.out.println("confidence of mix tx is " + arg0.getDepthInBlocks());
 
-					//TODO remove eventlistener
+					finishedTx.getConfidence().removeEventListener(this);
 				}
 				
 			}

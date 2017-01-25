@@ -106,9 +106,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	}
 	
 	
-	//put somewhere else, does not really fit into mixpartnerdiscovery?
-	//TODO use only valid pseudonyms (through coin selector for example) to prevent deanonymization
-	//as an input
+	//TODO: put somewhere else, does not really fit into mixpartnerdiscovery?
 	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba, File f, ProofMessage pm, PeerGroup pg) throws InsufficientMoneyException {
 		//build transaction
 		Transaction tx = new Transaction(params);
@@ -187,14 +185,14 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	}
 	
 	//get a random mixpartner from several potential mix partner
-	//TODO remove chosen tx, to not try mix later on
 	public BroadcastAnnouncement getMixpartner() {
 		int random;
 		Random r = new Random();
-		System.out.println(broadcasts.size());	
+		System.out.println("pick a random mix partner from list, broadcastsize is " + broadcasts.size());	
 		random = r.nextInt(broadcasts.size());
 		Transaction tx = broadcasts.get(random);
-		return BroadcastAnnouncement.deserialize(tx.getOutput(0).getScriptBytes());
+		broadcasts.remove(random);
+		return BroadcastAnnouncement.deserialize(tx.getOutput(1).getScriptBytes());
 	}
 
 	public boolean hasBroadcasts() {
