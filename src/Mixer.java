@@ -5,12 +5,7 @@ import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
-import java.nio.ByteBuffer;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.bitcoinj.core.Address;
@@ -18,32 +13,19 @@ import org.bitcoinj.core.BitcoinSerializer;
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.ProtocolException;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionBroadcast;
 import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionOutput;
-import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
-import org.bitcoinj.core.listeners.TransactionConfidenceEventListener;
-import org.bitcoinj.script.Script;
-import org.bitcoinj.script.Script.VerifyFlag;
-import org.bitcoinj.script.ScriptBuilder;
-import org.bitcoinj.wallet.CoinSelection;
-import org.bitcoinj.wallet.CoinSelector;
-import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
-
-import com.google.common.util.concurrent.ListenableFuture;
 
 import edu.kit.tm.ptp.Identifier;
 import edu.kit.tm.ptp.PTP;
 import edu.kit.tm.ptp.ReceiveListener;
 import edu.kit.tm.ptp.SendListener;
-import edu.kit.tm.ptp.SendListener.State;
 
 //TODO commitTx with complete tx send by mixpartner needs to be called
 
@@ -138,7 +120,6 @@ public class Mixer {
 				System.out.println("deserialized tx received from mixpartner");
 				
 				ECKey newPsnymKey = new ECKey();
-				Address nymAdrs = new Address(params, newPsnymKey.getPubKeyHash());
 				w.importKey(newPsnymKey);
 				long unixTime = System.currentTimeMillis() / 1000L;
 				final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, unixTime-(10*60*150));
@@ -404,7 +385,6 @@ public class Mixer {
 				//set the value later on
 				//TODO refactor duplicate code within mixAndConstructNewProof and passiveMix
 				ECKey psnymKey = new ECKey();
-				Address nymAdrs = new Address(params, psnymKey.getPubKeyHash());
 				w.importKey(psnymKey);
 				long unixTime = System.currentTimeMillis() / 1000L;
 				//add wished lock time

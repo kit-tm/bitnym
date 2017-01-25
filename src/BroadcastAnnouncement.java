@@ -67,7 +67,7 @@ public class BroadcastAnnouncement {
 		byte[] mixValue = Arrays.copyOfRange(data, 23, 27);
 		byte[] acceptableLoss = Arrays.copyOfRange(data, 27, 31);
 		
-		return new BroadcastAnnouncement(new String(onionAdress), (new BigInteger(mixValue)).intValue(), (new BigInteger(mixValue)).intValue());
+		return new BroadcastAnnouncement(new String(onionAdress), (new BigInteger(mixValue)).intValue(), (new BigInteger(acceptableLoss)).intValue());
 	}
 	
 	public String getOnionAdress() {

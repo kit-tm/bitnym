@@ -40,7 +40,6 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	private BlockChain bc;
 	private Block head;
 	private List<Transaction> broadcasts;
-	//TODO add ring buffer data structure
 	private Wallet wallet;
 	private ProofMessage pm;
 
@@ -177,8 +176,8 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		for(Transaction tx : assocTxs.values()) {
 			System.out.println("from within mixpartner discovery " + tx);
 			//TODO getPubKey might lead to an exception, use try-catch
-			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(0).getScriptBytes())
-					&& wallet.findKeyFromPubKey(tx.getInput(0).getScriptSig().getPubKey()) == null) {
+			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(1).getScriptBytes())
+					&& wallet.findKeyFromPubKey(tx.getInput(1).getScriptSig().getPubKey()) == null) {
 				this.broadcasts.add(tx);
 			}
 		}
@@ -186,6 +185,9 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	
 	//get a random mixpartner from several potential mix partner
 	public BroadcastAnnouncement getMixpartner() {
+		if(broadcasts.size() == 0) {
+			return null;
+		}
 		int random;
 		Random r = new Random();
 		System.out.println("pick a random mix partner from list, broadcastsize is " + broadcasts.size());	

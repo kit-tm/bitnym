@@ -8,24 +8,16 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.net.SocketTimeoutException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-
 import javax.annotation.Nullable;
 
 import org.bitcoinj.core.BitcoinSerializer;
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.BloomFilter;
-import org.bitcoinj.core.BloomFilter.BloomUpdate;
 import org.bitcoinj.core.FilteredBlock;
 import org.bitcoinj.core.GetDataMessage;
-import org.bitcoinj.core.Message;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.PartialMerkleTree;
 import org.bitcoinj.core.Peer;
@@ -38,17 +30,12 @@ import org.bitcoinj.core.TransactionConfidence;
 import org.bitcoinj.core.TransactionConfidence.ConfidenceType;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionOutput;
-import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
-import org.bitcoinj.core.listeners.PreMessageReceivedEventListener;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
 
 
 
@@ -147,6 +134,7 @@ public class ProofMessage implements Serializable {
 		for(int i=validationPath.size()-1; i > 1; i--) {
 			Transaction tx = validationPath.get(i);
 			if(!tx.getInput(outputIndices.get(i)).getOutpoint().getHash().equals(validationPath.get(i-1).getHash())) {
+				System.out.println("not a valid path!");
 				return false;
 			}
 		}
@@ -165,11 +153,13 @@ public class ProofMessage implements Serializable {
 	//proof_of_burn requirement should be also be met
 	private boolean isGenesisTransaction(Transaction tx) {
 		if(tx.getOutputs().size() < 2) {
+			System.out.println("first transaction is not a valid genesis transaction");
 			return false;
 		}
 		
 		if(!tx.getOutput(0).getScriptPubKey().isOpReturn() ||
 				tx.getOutput(0).getValue().isLessThan(MainClass.PROOF_OF_BURN)) {
+			System.out.println("genesis tx has not apropriate op_return or doesn't pay the proof of burn");
 			return false;
 		}
 		
@@ -182,16 +172,19 @@ public class ProofMessage implements Serializable {
 		//check locktime and compare to current bip113 time
 		//we only accept p2sh
 		if(!getLastTransactionOutput().getScriptPubKey().isPayToScriptHash()) {
+			System.out.println("the psynym is not a p2sh");
 			return false;
 		}
 		
 		//check that redeem script matches the p2sh output hash
 		if(!ScriptBuilder.createP2SHOutputScript(sp.getRedeemScript()).equals(getLastTransactionOutput().getScriptPubKey())) {
+			System.out.println("the redeem script doesn't match the p2sh output hash");
 			return false;
 		}
 		
 		//check that the redeem script is the one we specified and check that it is still locked
 		if(!sp.isRedeemScriptRightFormat() || !sp.isLocked(bc)) {
+			System.out.println("redeem script is either not in right format or transaction is not locked, might be not spend, but we can't know without utxo set");
 			return false;
 		}
 		return true;
