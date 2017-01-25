@@ -25,6 +25,7 @@ import org.bitcoinj.core.ProtocolException;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionBroadcast;
 import org.bitcoinj.core.TransactionConfidence;
+import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.core.listeners.TransactionConfidenceEventListener;
@@ -116,7 +117,7 @@ public class Mixer {
 		//received serialized proof, so deserialize, and check proof
 		System.out.println("check partner proof");
 		this.partnerProof = (ProofMessage) deserialize(arg0);
-		if(!partnerProof.isValidProof(bc)) {
+		if(!partnerProof.isProbablyValid(params, bc, pg)) {
 			System.out.println("proof of mix partner is invalid");
 			return;
 		}
@@ -130,6 +131,10 @@ public class Mixer {
 				//sign then and send back
 				System.out.println("try to deserialize tx received from mixpartner");
 				final Transaction rcvdTx = deserializeTransaction(arg0);
+				if(!checkTxInputIsFromProof(rcvdTx, 0)) {
+					//partner put an input which is not from the proof
+					return;
+				}
 				final int outputOrder = rcvdTx.getOutputs().size();
 				System.out.println("deserialized tx received from mixpartner");
 				
@@ -157,6 +162,9 @@ public class Mixer {
 							//deserialize tx, check rcvd Tx, then sign and broadcast
 							
 							Transaction lastTxVersion = deserializeTransaction(arg0);
+							if(!checkTx(rcvdTx, lastTxVersion)) {
+								return;
+							}
 							lastTxVersion.getInput(1).setScriptSig(inSp.calculateSigScript(lastTxVersion, 1, w));
 							lastTxVersion.getInput(1).verify(ownProof.getLastTransactionOutput());
 							assert(lastTxVersion != null);
@@ -187,6 +195,9 @@ public class Mixer {
 						
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
+							if(!checkTx(rcvdTx, deserializeTransaction(arg0))) {
+								return;
+							}
 							commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
 						}
 
@@ -212,11 +223,14 @@ public class Mixer {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
-		
+				
 		
 	}
 	
+	private boolean checkTxInputIsFromProof(Transaction rcvdTx, int i) {
+		return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
+	}
+
 	
 	public void initiateMix() {
 		
@@ -260,13 +274,8 @@ public class Mixer {
 				partnerProof = (ProofMessage) deserialize(arg0);
 				//check proof
 				System.out.println("check partner proof");
-//				if(!partnerProof.isValidProof(bc)) {
-//					System.out.println("proof of mix partner is invalid");
-//					return;
-//				}
-				//TODO remove this, only for testing
-				if(!partnerProof.isNymTxInBlockChain(params, bc, pg)) {
-					System.out.println("tx is not in blockchain");
+				if(!partnerProof.isProbablyValid(params, bc, pg)) {
+					System.out.println("proof of mix partner is invalid");
 					return;
 				}
 				challengeResponse();
@@ -351,11 +360,31 @@ public class Mixer {
 		});
 	}
 	
-	//check that partner used the proper transactioninput
+	//check that partner used the proper transactioninput announced in corresponding proof
 	//right output coin value etc.
-	private void checkTx(Transaction mixTx, Transaction rcvdTxToCheck) {
-		// TODO implement
+	private boolean checkTx(Transaction mixTx, Transaction rcvdTxToCheck) {
+		if(rcvdTxToCheck.getInputs().size() > 2 || rcvdTxToCheck.getOutputs().size() > 2) {
+			return false;
+		}
 		
+		if(rcvdTxToCheck.getOutputs().size() == 2) {
+			if(!rcvdTxToCheck.getOutput(0).getValue().equals(rcvdTxToCheck.getOutput(1).getValue())) {
+				return false;
+			}
+		}
+		
+		for(int i=0; i < mixTx.getInputs().size(); i++) {
+			if(!mixTx.getInput(i).getConnectedOutput().equals(rcvdTxToCheck.getInput(i).getConnectedOutput())) {
+				return false;
+			}
+		}
+		for(int i=0; i < mixTx.getOutputs().size(); i++) {
+			if(!mixTx.getOutput(i).equals(rcvdTxToCheck.getOutput(i))) {
+				return false;
+			}
+		}		
+		
+		return true;
 	}
 	
 	private void mixAndConstructNewProof() {
@@ -401,7 +430,7 @@ public class Mixer {
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
 							final Transaction rcvdTx = deserializeTransaction(arg0);
-
+							checkTxInputIsFromProof(rcvdTx, 1);
 							checkTx(mixTx, rcvdTx);
 							//sign transaction and send it to the network
 
@@ -440,6 +469,7 @@ public class Mixer {
 						public void messageReceived(byte[] arg0, Identifier arg1) {
 							// add our output, sign and send to partner then
 							Transaction penFinalTx = deserializeTransaction(arg0);
+							checkTxInputIsFromProof(penFinalTx, 1);
 							checkTx(mixTx, penFinalTx);
 							penFinalTx.addOutput(newPsyNym);
 							penFinalTx.getInput(0).setScriptSig(inSp.calculateSigScript(penFinalTx, 0, w));

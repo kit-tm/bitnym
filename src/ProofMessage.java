@@ -144,7 +144,7 @@ public class ProofMessage implements Serializable {
 	public boolean isValidPath() {
 		//check that the transaction build a path and are not just random txs, 
 		//by checking the tx hashes with those of the outpoints
-		for(int i=validationPath.size(); i > 1; i--) {
+		for(int i=validationPath.size()-1; i > 1; i--) {
 			Transaction tx = validationPath.get(i);
 			if(!tx.getInput(outputIndices.get(i)).getOutpoint().getHash().equals(validationPath.get(i-1).getHash())) {
 				return false;
@@ -294,10 +294,9 @@ public class ProofMessage implements Serializable {
 		return block.getHeader().getHash();
 	}
 
-	public boolean isValidProof(BlockChain bc) {
-		return true;
-		//return isValidPath() && isValidGPTx() &&
-		//		isNymNotSpend(bc) && isNymTxInBlockChain();
+	public boolean isValidProof(BlockChain bc, PeerGroup pg, NetworkParameters params) {
+		return isValidPath() && isValidGPTx() &&
+				isNymNotSpend(bc) && isNymTxInBlockChain(params, bc, pg);
 	}
 	
 	//when we want to create a mixtx, the outputs are not locked, so we do not know for sure whether the outputs are utxo
