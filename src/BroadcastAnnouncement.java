@@ -24,7 +24,6 @@ public class BroadcastAnnouncement {
 		this.acceptableLossValue = aLV;
 	}
 
-	//TODO deserialize and check magicNumber
 	public static boolean isBroadcastAnnouncementScript(byte[] script) {
 		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(script));
 		//TODO expand this to full verification, e.g. parsing the script

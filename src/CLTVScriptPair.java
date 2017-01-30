@@ -55,7 +55,6 @@ public class CLTVScriptPair implements Serializable {
 	
 	
 	//TODO compute expire date maybe in this class, instead of letting the caller doing the work?
-	//TODO compute unix time 
 	//TODO change the format to match p2pk as p2pkh doesn't seem useful here
 	CLTVScriptPair(ECKey newPsynymKey, long expireDate) {
 		ScriptBuilder sb = new ScriptBuilder();

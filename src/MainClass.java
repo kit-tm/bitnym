@@ -327,11 +327,9 @@ public class MainClass {
 		//create p2sh output, for possibility of freezing funds to prove it is utxo
 		tx.addOutput(new TransactionOutput(params, tx, PSNYMVALUE, sp.getPubKeyScript().getProgram()));
 		
-		//TODO add change, for know we add everything except PoB and fees to the psnym
 		ECKey changeKey = new ECKey();
 		Address changeAdrs = new Address(params, changeKey.getPubKeyHash());
 		w.importKey(changeKey);
-//		tx.addOutput(new TransactionOutput(params, tx, suffInptValue.minus(totalOutput), changeAdrs));	
 		try {
 			log.info("verify the transaction");
 			tx.verify();
@@ -350,7 +348,6 @@ public class MainClass {
 		try {
 			w.saveToFile(f);
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 		//Wallet.SendResult result = w.sendCoins(req);

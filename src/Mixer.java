@@ -27,13 +27,10 @@ import edu.kit.tm.ptp.PTP;
 import edu.kit.tm.ptp.ReceiveListener;
 import edu.kit.tm.ptp.SendListener;
 
-//TODO commitTx with complete tx send by mixpartner needs to be called
 
 //TODO check which broadcastannouncement read and accepted for mixing, and check whether we want to mix this nym or not
 
 //TODO refactor into one branch, mix outputs, send back for signing, and sign ourselves, less code => less bugs
-//TODO close ptp after mixing
-//TODO lock messages to certain .onion adress, after a certain .onion adress is used (when active) or received (when passive)
 
 public class Mixer {
 	private PTP ptp;
@@ -149,6 +146,9 @@ public class Mixer {
 							lastTxVersion.getInput(1).verify(ownProof.getLastTransactionOutput());
 							assert(lastTxVersion != null);
 							broadcastMixTx(outputOrder, outSp,lastTxVersion, 1);
+							ptp.exit();
+							//don't reuse hidden service, to not link pseudonyms
+							ptp.deleteHiddenService();
 							
 						}
 					});
@@ -179,6 +179,9 @@ public class Mixer {
 								return;
 							}
 							commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
+							ptp.exit();
+							//don't reuse hidden service, to not link pseudonyms
+							ptp.deleteHiddenService();
 						}
 
 						
@@ -422,6 +425,9 @@ public class Mixer {
 							System.out.println(ownProof.getLastTransactionOutput());
 							//TODO remove transaction if transaction is rejected, maybe just add to proof message only, and commit only when in the blockchain?
 							broadcastMixTx(outputOrder, outSp, rcvdTx, 0);
+							ptp.exit();
+							//don't reuse hidden service, to not link pseudonyms
+							ptp.deleteHiddenService();
 							
 						}
 
@@ -458,6 +464,9 @@ public class Mixer {
 								@Override
 								public void messageReceived(byte[] arg0, Identifier arg1) {
 									commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
+									ptp.exit();
+									//don't reuse hidden service, to not link pseudonyms
+									ptp.deleteHiddenService();
 								}
 							});
 							ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
