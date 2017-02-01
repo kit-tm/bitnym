@@ -193,7 +193,8 @@ public class MainClass {
 		try {
 			//generate genesis transaction if our proof is empty
 			if(pm.getValidationPath().size() == 0 && wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
-				genesisTx = generateGenesisTransaction(params, pg, wallet, pm, f, TimeUnit.MINUTES.toSeconds(0));
+				TransactionGenerator tg = new TransactionGenerator(params, pg, wallet);
+				genesisTx = tg.generateGenesisTransaction(pm, f, TimeUnit.MINUTES.toSeconds(0));
 				//TODO register listener before sending tx out, to avoid missing a confidence change
 				genesisTx.getConfidence().addEventListener(new Listener() {
 
@@ -273,7 +274,7 @@ public class MainClass {
 			e.printStackTrace();
 		}
 		try {
-			TimeUnit.MINUTES.sleep(5);
+			TimeUnit.MINUTES.sleep(20);
 		} catch (InterruptedException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
@@ -285,97 +286,6 @@ public class MainClass {
 	}
 	
 	
-	//TODO refactor this out into an seperate class, and split into generating transaction
-	// and sending of the transaction
-	//@param lockTime how long to lock Psynym in seconds
-	private static Transaction generateGenesisTransaction(NetworkParameters params, PeerGroup pg, Wallet w, ProofMessage pm, File f, long lockTime) throws InsufficientMoneyException {
-		log.info("try generating genesis tx");
-		Transaction tx = new Transaction(params);
-		//TODO refactoring: use smaller string for less tx fees
-		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
-		//wallet Balance is not sufficient
-		if (w.getBalance().isLessThan(PROOF_OF_BURN)) {
-			throw new InsufficientMoneyException(PROOF_OF_BURN.minus(w.getBalance()));
-		}
-
-		
-		
-		//add marker output
-		tx.addOutput(PROOF_OF_BURN, ScriptBuilder.createOpReturnScript(opretData));
-		
-		//add pseudonym output
-		ECKey psnymKey = new ECKey();
-		long unixTime = System.currentTimeMillis() / 1000L;
-		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime-(10*60*500));
-		System.out.println(sp.toString());
-		assert(sp != null);
-		w.importKey(psnymKey);
-		
-		Coin suffInptValue = Coin.ZERO;
-		
-		
-		List<TransactionOutput> unspents = w.getUnspents();
-				
-		Iterator<TransactionOutput> iterator = unspents.iterator();
-		//TODO use only certain inputs, if so why use certain inputs?
-		//TODO use CoinSelector instead
-		while(suffInptValue.isLessThan(totalOutput) && iterator.hasNext()) {
-			TransactionOutput next = iterator.next();
-			suffInptValue = suffInptValue.add(next.getValue());
-			tx.addInput(next);
-		}
-		//create p2sh output, for possibility of freezing funds to prove it is utxo
-		tx.addOutput(new TransactionOutput(params, tx, PSNYMVALUE, sp.getPubKeyScript().getProgram()));
-		
-		ECKey changeKey = new ECKey();
-		Address changeAdrs = new Address(params, changeKey.getPubKeyHash());
-		w.importKey(changeKey);
-		try {
-			log.info("verify the transaction");
-			tx.verify();
-		} catch (VerificationException e) {
-			e.printStackTrace();
-		}
-		
-		
-		
-		SendRequest req = SendRequest.forTx(tx);
-		req.changeAddress = changeAdrs;
-		req.shuffleOutputs = false;
-		req.signInputs = true;
-		w.completeTx(req);
-		w.commitTx(req.tx);
-		try {
-			w.saveToFile(f);
-		} catch (IOException e1) {
-			e1.printStackTrace();
-		}
-		//Wallet.SendResult result = w.sendCoins(req);
-		TransactionBroadcast a = pg.broadcastTransaction(req.tx);
-		ListenableFuture<Transaction> future = a.broadcast();
-		try {
-			Transaction b = future.get();
-			pm.addTransaction(b,1, sp);
-			pm.writeToFile();
-		} catch (InterruptedException | ExecutionException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-//		try {
-//			result.broadcastComplete.get();
-//			System.out.println("broadcast complete");
-//			pm.addTransaction(result.tx, 1);
-//			pm.writeToFile();
-//			System.out.println("added genesis tx to proof message data structure and file");
-//		} catch (InterruptedException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		} catch (ExecutionException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
-		log.info("genereated genesis tx");
-		return tx;
-	}
+	
 
 }

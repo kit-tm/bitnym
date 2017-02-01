@@ -26,6 +26,7 @@ import edu.kit.tm.ptp.Identifier;
 import edu.kit.tm.ptp.PTP;
 import edu.kit.tm.ptp.ReceiveListener;
 import edu.kit.tm.ptp.SendListener;
+import edu.kit.tm.ptp.SendListener.State;
 
 
 //TODO check which broadcastannouncement read and accepted for mixing, and check whether we want to mix this nym or not
@@ -110,7 +111,7 @@ public class Mixer {
 				System.out.println("try to deserialize tx received from mixpartner");
 				final Transaction rcvdTx = deserializeTransaction(arg0);
 				if(!checkTxInputIsFromProof(rcvdTx, 0)) {
-					//partner put an input which is not from the proof
+					System.out.println("checktxinput is from proof failed");
 					return;
 				}
 				final int outputOrder = rcvdTx.getOutputs().size();
@@ -140,16 +141,13 @@ public class Mixer {
 							
 							Transaction lastTxVersion = deserializeTransaction(arg0);
 							if(!checkTx(rcvdTx, lastTxVersion)) {
-								return;
+								System.out.println("checktx failed");
+								//return;
 							}
 							lastTxVersion.getInput(1).setScriptSig(inSp.calculateSigScript(lastTxVersion, 1, w));
 							lastTxVersion.getInput(1).verify(ownProof.getLastTransactionOutput());
 							assert(lastTxVersion != null);
-							broadcastMixTx(outputOrder, outSp,lastTxVersion, 1);
-							ptp.exit();
-							//don't reuse hidden service, to not link pseudonyms
-							ptp.deleteHiddenService();
-							
+							broadcastMixTx(outputOrder, outSp,lastTxVersion, 1);							
 						}
 					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
@@ -176,7 +174,8 @@ public class Mixer {
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
 							if(!checkTx(rcvdTx, deserializeTransaction(arg0))) {
-								return;
+								System.out.println("checktx failed");
+								//return;
 							}
 							commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
 							ptp.exit();
@@ -211,7 +210,9 @@ public class Mixer {
 	}
 	
 	private boolean checkTxInputIsFromProof(Transaction rcvdTx, int i) {
-		return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
+		//return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
+		return rcvdTx.getInput(i).getOutpoint().getHash().equals(partnerProof.getLastTransaction().getHash()) &&
+				partnerProof.getLastTransactionOutput().getIndex() == rcvdTx.getInput(i).getOutpoint().getIndex();
 	}
 
 	
@@ -357,7 +358,7 @@ public class Mixer {
 		}
 		
 		for(int i=0; i < mixTx.getInputs().size(); i++) {
-			if(!mixTx.getInput(i).getConnectedOutput().equals(rcvdTxToCheck.getInput(i).getConnectedOutput())) {
+			if(!mixTx.getInput(i).getOutpoint().equals(rcvdTxToCheck.getInput(i).getOutpoint())) {
 				return false;
 			}
 		}
@@ -373,67 +374,109 @@ public class Mixer {
 	private void mixAndConstructNewProof() {
 		//mix
 		System.out.println("try to mix and construct new proof");
-				final Transaction mixTx = new Transaction(params);
-				long currentUnixTime = System.currentTimeMillis() / 1000L;
-				System.out.println("set locktime of tx to " + String.valueOf(currentUnixTime-(10*60*150)));
-				mixTx.setLockTime(currentUnixTime-(10*60*150));
-				mixTx.addInput(this.ownProof.getLastTransactionOutput());
-				//just needs to be anything else than uint_max, so that nlocktime is really used
-				mixTx.getInput(0).setSequenceNumber(3);
-				// draw random value for decision of output order
-				// TODO use secure random bit
-				Random r = new Random();
-				final int outputOrder = r.nextInt(2);
-				//outputOrder = 1;
-				//set the value later on
-				//TODO refactor duplicate code within mixAndConstructNewProof and passiveMix
-				ECKey psnymKey = new ECKey();
-				w.importKey(psnymKey);
-				long unixTime = System.currentTimeMillis() / 1000L;
-				//add wished lock time
-				final CLTVScriptPair inSp = ownProof.getScriptPair();
-				assert(inSp != null);
-				//TODO add wished locktime
-				final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime-(10*60*150));
-				//TODO compute the right value as (input1 + input2 - fee)/2
-				Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
-				final TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
-				byte[] serializedTx;
-				if(outputOrder == 0) {
-					//add the own output and send the unfinished tx to the mix partner
-					//the partner adds the input and output and signs the tx, we will then sign it
-					//after checking correctness
-					mixTx.addOutput(newPsyNym);
-					serializedTx = mixTx.bitcoinSerialize();
+		final Transaction mixTx = new Transaction(params);
+		long currentUnixTime = System.currentTimeMillis() / 1000L;
+		System.out.println("set locktime of tx to " + String.valueOf(currentUnixTime-(10*60*150)));
+		mixTx.setLockTime(currentUnixTime-(10*60*150));
+		mixTx.addInput(this.ownProof.getLastTransactionOutput());
+		//just needs to be anything else than uint_max, so that nlocktime is really used
+		mixTx.getInput(0).setSequenceNumber(3);
+		// draw random value for decision of output order
+		// TODO use secure random bit
+		Random r = new Random();
+		final int outputOrder = r.nextInt(2);
+		//outputOrder = 1;
+		//set the value later on
+		//TODO refactor duplicate code within mixAndConstructNewProof and passiveMix
+		ECKey psnymKey = new ECKey();
+		w.importKey(psnymKey);
+		long unixTime = System.currentTimeMillis() / 1000L;
+		//add wished lock time
+		final CLTVScriptPair inSp = ownProof.getScriptPair();
+		assert(inSp != null);
+		//TODO add wished locktime
+		final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime-(10*60*150));
+		//TODO compute the right value as (input1 + input2 - fee)/2
+		Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
+		final TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
+		byte[] serializedTx;
+		if(outputOrder == 0) {
+			//add the own output and send the unfinished tx to the mix partner
+			//the partner adds the input and output and signs the tx, we will then sign it
+			//after checking correctness
+			mixTx.addOutput(newPsyNym);
+			serializedTx = mixTx.bitcoinSerialize();
 
-					//check tx, sign it, then send it out to the bitcoin network
-					this.ptp.setReceiveListener(new ReceiveListener() {
-						
+			//check tx, sign it, then send it out to the bitcoin network
+			this.ptp.setReceiveListener(new ReceiveListener() {
+
+				@Override
+				public void messageReceived(byte[] arg0, Identifier arg1) {
+					final Transaction rcvdTx = deserializeTransaction(arg0);
+					if(!checkTxInputIsFromProof(rcvdTx, 1)) {
+						System.out.println("tx input from received tx is not the same as in the proof");
+						//return;
+					}
+					if(!checkTx(mixTx, rcvdTx)) {
+						System.out.println("checktx failed");
+					}
+					//sign transaction and send it to the network
+
+					rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
+					rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+
+					//this method just does rudimentary checks, does not check whether inputs are already spent for example
+					rcvdTx.verify();
+
+					System.out.println(ownProof.getLastTransactionOutput());
+					//TODO remove transaction if transaction is rejected, maybe just add to proof message only, and commit only when in the blockchain?
+					broadcastMixTx(outputOrder, outSp, rcvdTx, 0);
+
+				}
+
+
+			});
+			this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
+			try {
+				TimeUnit.MINUTES.sleep(2);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+
+
+		} else {
+			//let the mixpartner add his output first and partners input
+			//we will add then our output and sign the tx, send it to the partner
+			//and let the partner sign the tx
+			serializedTx = mixTx.bitcoinSerialize();
+			this.ptp.setReceiveListener(new ReceiveListener() {
+
+				@Override
+				public void messageReceived(byte[] arg0, Identifier arg1) {
+					// add our output, sign and send to partner then
+					Transaction penFinalTx = deserializeTransaction(arg0);
+					if(!checkTxInputIsFromProof(penFinalTx, 1)) {
+						System.out.println("checktxinputisfromproof failed");
+					}
+					if(!checkTx(mixTx, penFinalTx)) {
+						System.out.println("checktx failed");
+					}
+					penFinalTx.addOutput(newPsyNym);
+					penFinalTx.getInput(0).setScriptSig(inSp.calculateSigScript(penFinalTx, 0, w));
+					penFinalTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+					ptp.setReceiveListener(new ReceiveListener() {
+
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
-							final Transaction rcvdTx = deserializeTransaction(arg0);
-							checkTxInputIsFromProof(rcvdTx, 1);
-							checkTx(mixTx, rcvdTx);
-							//sign transaction and send it to the network
-
-							rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
-							rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
-							
-							//this method just does rudimentary checks, does not check whether inputs are already spent for example
-							rcvdTx.verify();
-
-							System.out.println(ownProof.getLastTransactionOutput());
-							//TODO remove transaction if transaction is rejected, maybe just add to proof message only, and commit only when in the blockchain?
-							broadcastMixTx(outputOrder, outSp, rcvdTx, 0);
+							commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
 							ptp.exit();
 							//don't reuse hidden service, to not link pseudonyms
 							ptp.deleteHiddenService();
-							
 						}
-
-						
 					});
-					this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
+					ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
 					try {
 						TimeUnit.MINUTES.sleep(2);
 					} catch (InterruptedException e) {
@@ -441,52 +484,16 @@ public class Mixer {
 						e.printStackTrace();
 					}
 
-
-					
-				} else {
-					//let the mixpartner add his output first and partners input
-					//we will add then our output and sign the tx, send it to the partner
-					//and let the partner sign the tx
-					serializedTx = mixTx.bitcoinSerialize();
-					this.ptp.setReceiveListener(new ReceiveListener() {
-						
-						@Override
-						public void messageReceived(byte[] arg0, Identifier arg1) {
-							// add our output, sign and send to partner then
-							Transaction penFinalTx = deserializeTransaction(arg0);
-							checkTxInputIsFromProof(penFinalTx, 1);
-							checkTx(mixTx, penFinalTx);
-							penFinalTx.addOutput(newPsyNym);
-							penFinalTx.getInput(0).setScriptSig(inSp.calculateSigScript(penFinalTx, 0, w));
-							penFinalTx.getInput(0).verify(ownProof.getLastTransactionOutput());
-							ptp.setReceiveListener(new ReceiveListener() {
-								
-								@Override
-								public void messageReceived(byte[] arg0, Identifier arg1) {
-									commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
-									ptp.exit();
-									//don't reuse hidden service, to not link pseudonyms
-									ptp.deleteHiddenService();
-								}
-							});
-							ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
-							try {
-								TimeUnit.MINUTES.sleep(2);
-							} catch (InterruptedException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
-							
-						}
-					});
-					this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
-					try {
-						TimeUnit.MINUTES.sleep(2);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
 				}
+			});
+			this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
+			try {
+				TimeUnit.MINUTES.sleep(2);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 	}
 	
 	
@@ -525,6 +532,14 @@ public class Mixer {
 		rcvdTx.verify();
 		w.commitTx(rcvdTx);
 		System.out.println(rcvdTx);
+		ptp.setSendListener(new SendListener() {
+			
+			@Override
+			public void messageSent(long arg0, Identifier arg1, State arg2) {
+				ptp.exit();
+				ptp.deleteHiddenService();				
+			}
+		});
 		ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
 		assert(rcvdTx != null);
 		TransactionBroadcast broadcast = pg.broadcastTransaction(rcvdTx);
