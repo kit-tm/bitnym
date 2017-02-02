@@ -29,7 +29,6 @@ public class CLTVScriptPairTest {
 		try {
 			method = a.getDeclaredMethod("encodeExpireDate", Long.TYPE);
 		} catch (NoSuchMethodException | SecurityException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		method.setAccessible(true);
@@ -39,7 +38,6 @@ public class CLTVScriptPairTest {
 			result = (byte[]) method.invoke(null, expireTime);
 		} catch (IllegalAccessException | IllegalArgumentException
 				| InvocationTargetException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		ByteBuffer bb = ByteBuffer.allocate(3);

@@ -105,7 +105,6 @@ public class Mixer {
 
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
-				// TODO Auto-generated method stub
 				//deserialize received tx, and add own input and output and
 				//sign then and send back
 				System.out.println("try to deserialize tx received from mixpartner");
@@ -154,7 +153,6 @@ public class Mixer {
 					try {
 						TimeUnit.MINUTES.sleep(2);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 					
@@ -189,7 +187,6 @@ public class Mixer {
 					try {
 						TimeUnit.MINUTES.sleep(2);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 				}
@@ -202,7 +199,6 @@ public class Mixer {
 		try {
 			TimeUnit.MINUTES.sleep(2);
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 				
@@ -270,7 +266,6 @@ public class Mixer {
 		try {
 			TimeUnit.MINUTES.sleep(2);
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
@@ -299,7 +294,6 @@ public class Mixer {
 		        out.writeObject(o);
 		        serialized = bos.toByteArray();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return serialized;
@@ -310,10 +304,8 @@ public class Mixer {
 			         ObjectInput in = new ObjectInputStream(bis)) {
 			        return in.readObject();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return null;
@@ -338,7 +330,6 @@ public class Mixer {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
-				// TODO Auto-generated method stub
 				
 			}
 		});
@@ -440,7 +431,6 @@ public class Mixer {
 			try {
 				TimeUnit.MINUTES.sleep(2);
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 
@@ -456,7 +446,7 @@ public class Mixer {
 				@Override
 				public void messageReceived(byte[] arg0, Identifier arg1) {
 					// add our output, sign and send to partner then
-					Transaction penFinalTx = deserializeTransaction(arg0);
+					final Transaction penFinalTx = deserializeTransaction(arg0);
 					if(!checkTxInputIsFromProof(penFinalTx, 1)) {
 						System.out.println("checktxinputisfromproof failed");
 					}
@@ -470,6 +460,7 @@ public class Mixer {
 
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
+							checkTx(penFinalTx, deserializeTransaction(arg0));
 							commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
 							ptp.exit();
 							//don't reuse hidden service, to not link pseudonyms
@@ -480,7 +471,6 @@ public class Mixer {
 					try {
 						TimeUnit.MINUTES.sleep(2);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 
@@ -490,7 +480,6 @@ public class Mixer {
 			try {
 				TimeUnit.MINUTES.sleep(2);
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -517,7 +506,6 @@ public class Mixer {
 		try {
 			rcvdTx = bs.makeTransaction(arg0);			
 		} catch (ProtocolException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return rcvdTx;
@@ -557,7 +545,6 @@ public class Mixer {
 			@Override
 			public void onConfidenceChanged(TransactionConfidence arg0,
 					ChangeReason arg1) {
-				// TODO Auto-generated method stub
 				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					return;
 				}
@@ -591,7 +578,6 @@ public class Mixer {
 			public void onConfidenceChanged(
 					TransactionConfidence arg0,
 					ChangeReason arg1) {
-				// TODO Auto-generated method stub
 				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					return;
 				}

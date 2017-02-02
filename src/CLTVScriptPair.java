@@ -29,7 +29,6 @@ import org.bitcoinj.wallet.Wallet;
  */
 
 
-//TODO: bitcoinj doesn't seem to support management of redeemscripts for custom p2sh,
 //maybe use serializable hashtable to store some CLTVScriptPair needed for when creating inputs
 //spending those p2sh outputs
 public class CLTVScriptPair implements Serializable {
@@ -161,8 +160,8 @@ public class CLTVScriptPair implements Serializable {
 	}
 
 	//check that the redeem script is the one we defined, not some other
+	//TODO implement
 	public boolean isRedeemScriptRightFormat() {
-		// TODO Auto-generated method stub
 		return false;
 	}
 
@@ -181,7 +180,6 @@ public class CLTVScriptPair implements Serializable {
 			try {
 				iteratingBlock = iteratingBlock.getPrev(bc.getBlockStore());
 			} catch (BlockStoreException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}

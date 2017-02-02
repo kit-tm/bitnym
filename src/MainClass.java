@@ -70,7 +70,6 @@ public class MainClass {
 			ptp.createHiddenService();
 			System.out.println(ptp.getIdentifier().getTorAddress());
 		} catch (IOException e3) {
-			// TODO Auto-generated catch block
 			e3.printStackTrace();
 		}
 		Wallet wallet = null;
@@ -80,14 +79,12 @@ public class MainClass {
 			try {
 				wallet.saveToFile(f);
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		} else {
 			try {
 				wallet = Wallet.loadFromFile(f, null);
 			} catch (UnreadableWalletException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -98,13 +95,11 @@ public class MainClass {
 		try {
 			spvbs = new SPVBlockStore(params, bs);
 		} catch (BlockStoreException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		try {
 			bc = new BlockChain(params, wallet, spvbs);
 		} catch (BlockStoreException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
@@ -167,7 +162,6 @@ public class MainClass {
 				System.out.println("sleep for 10minutes");
 				TimeUnit.MINUTES.sleep(15);
 			} catch (InterruptedException e2) {
-				//TODO Auto-generated catch block
 				e2.printStackTrace();
 			}
 		}
@@ -178,7 +172,6 @@ public class MainClass {
 		try {
 			wallet.saveToFile(f);
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 		
@@ -212,36 +205,31 @@ public class MainClass {
 				});
 			}
 		} catch (InsufficientMoneyException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
-		try {
-			System.out.println("sendBroadcastAnnouncement");
-			for(int i=0; i<50;i++) {
-				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
-					try {
-						TimeUnit.MINUTES.sleep(1);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				} else {
-					tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm);
-				}
-			}
-		} catch (InsufficientMoneyException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+//		try {
+//			System.out.println("sendBroadcastAnnouncement");
+//			for(int i=0; i<50;i++) {
+//				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+//					try {
+//						TimeUnit.MINUTES.sleep(1);
+//					} catch (InterruptedException e) {
+//						e.printStackTrace();
+//					}
+//				} else {
+//					tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm);
+//				}
+//			}
+//		} catch (InsufficientMoneyException e) {
+//			e.printStackTrace();
+//		}
 		//	try {
 		//		TimeUnit.MINUTES.sleep(15);
 		//	} catch (InterruptedException e1) {
-		//		// TODO Auto-generated catch block
 		//		e1.printStackTrace();
 		//	}
 //		catch (InterruptedException e1) {
-//			// TODO Auto-generated catch block
 //			e1.printStackTrace();
 //		}
 
@@ -262,7 +250,6 @@ public class MainClass {
 				    try {
 						destinationAddress = br.readLine();
 					} catch (IOException e1) {
-						// TODO Auto-generated catch block
 						e1.printStackTrace();
 					}
 					//Mixer m = new Mixer(ptp, mpd.getMixpartner(), pm, wallet, params);
@@ -275,13 +262,11 @@ public class MainClass {
 			}
 			
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		try {
 			TimeUnit.MINUTES.sleep(20);
 		} catch (InterruptedException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 		

@@ -59,10 +59,8 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		try {
 			this.head = headFuture.get();
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch blockTransaction
 			e.printStackTrace();
 		} catch (ExecutionException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 						
@@ -105,13 +103,6 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	}
 	
 
-
-
-	private Coin estimateBroadcastFee() {
-		//TODO implement
-		return Coin.valueOf(50000);
-	}
-
 	@Override
 	public void notifyNewBestBlock(StoredBlock sblock)
 			throws VerificationException {
@@ -122,10 +113,8 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		try {
 			this.head = futureBlock.get();
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (ExecutionException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		System.out.println("searchCurrentBlockForPartners");

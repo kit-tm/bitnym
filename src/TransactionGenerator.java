@@ -78,8 +78,6 @@ public class TransactionGenerator {
 		List<TransactionOutput> unspents = w.getUnspents();
 
 		Iterator<TransactionOutput> iterator = unspents.iterator();
-		//TODO use only certain inputs, if so why use certain inputs?
-		//TODO use CoinSelector instead
 //		while(suffInptValue.isLessThan(totalOutput) && iterator.hasNext()) {
 //			TransactionOutput next = iterator.next();
 //			suffInptValue = suffInptValue.add(next.getValue());
@@ -119,7 +117,6 @@ public class TransactionGenerator {
 			pm.addTransaction(b,1, sp);
 			pm.writeToFile();
 		} catch (InterruptedException | ExecutionException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		//			try {
@@ -129,10 +126,8 @@ public class TransactionGenerator {
 		//				pm.writeToFile();
 		//				System.out.println("added genesis tx to proof message data structure and file");
 		//			} catch (InterruptedException e) {
-		//				// TODO Auto-generated catch block
 		//				e.printStackTrace();
 		//			} catch (ExecutionException e) {
-		//				// TODO Auto-generated catch block
 		//				e.printStackTrace();
 		//			}
 		log.info("genereated genesis tx");
@@ -164,7 +159,6 @@ public class TransactionGenerator {
 			w.commitTx(tx);
 			w.saveToFile(f);
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 		

@@ -107,13 +107,10 @@ public class ProofMessage implements Serializable {
 			}
 			
 		} catch (FileNotFoundException e4) {
-			// TODO Auto-generated catch block
 			e4.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -243,7 +240,6 @@ public class ProofMessage implements Serializable {
 						isTxInBlockchain.setMonitorState(true);
 					}
 				} catch (BlockStoreException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 				
@@ -280,7 +276,6 @@ public class ProofMessage implements Serializable {
 				assert(block != null);
 				block = block.getPrev(bc.getBlockStore());
 			} catch (BlockStoreException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -395,10 +390,8 @@ public class ProofMessage implements Serializable {
 				//rcvdTx = (Transaction) bs.deserialize(bb);
 				txList.add(rcvdTx);
 			} catch (ProtocolException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} //catch (IOException e) {
-				// TODO Auto-generated catch block
 			//	e.printStackTrace();
 			//}
 		}
@@ -469,10 +462,8 @@ public class ProofMessage implements Serializable {
 			fout.close();
 			log.info("saved proof message to file: " + filePath);
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
