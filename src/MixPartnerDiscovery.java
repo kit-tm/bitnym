@@ -104,46 +104,10 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		return BroadcastAnnouncement.isBroadcastAnnouncementScript(script);
 	}
 	
-	
-	//TODO: put somewhere else, does not really fit into mixpartnerdiscovery?
-	public static void sendBroadcastAnnouncement(NetworkParameters params, Wallet w, BroadcastAnnouncement ba, File f, ProofMessage pm, PeerGroup pg) throws InsufficientMoneyException {
-		//build transaction
-		Transaction tx = new Transaction(params);
-		
-		Script s = ba.buildScript();
-		System.out.println("Script size is " + s.SIG_SIZE);
-		//System.out.println(s.getScriptType());
-		ECKey psnymKey = new ECKey();
-		long unixTime = System.currentTimeMillis() / 1000L;
-		//TODO use bitcoin nets median time
-		tx.setLockTime(unixTime-(10*60*150));
-		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime-(10*60*150));
-		w.importKey(psnymKey);
-		tx.addOutput(new TransactionOutput(params, tx, pm.getLastTransactionOutput().getValue().subtract(estimateBroadcastFee()), sp.getPubKeyScript().getProgram()));
-		tx.addOutput(Coin.ZERO, s);
-		tx.addInput(pm.getLastTransactionOutput());
-		tx.getInput(0).setSequenceNumber(3); //the concrete value doesn't matter, this is just for cltv
-		tx.getInput(0).setScriptSig(pm.getScriptPair().calculateSigScript(tx, 0, w));
-		
-		try {
-			w.commitTx(tx);
-			w.saveToFile(f);
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
-		
-		TransactionBroadcast broadcast = pg.broadcastTransaction(tx);
-		pm.addTransaction(tx, 0, sp);
-		pm.writeToFile();
-		System.out.println("save broadcast announcement to file");
-		
-		
-
-	}
 
 
-	private static Coin estimateBroadcastFee() {
+
+	private Coin estimateBroadcastFee() {
 		//TODO implement
 		return Coin.valueOf(50000);
 	}

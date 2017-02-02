@@ -190,10 +190,10 @@ public class MainClass {
 		
 
 		Transaction genesisTx;
+		TransactionGenerator tg = new TransactionGenerator(params, pg, wallet);
 		try {
 			//generate genesis transaction if our proof is empty
 			if(pm.getValidationPath().size() == 0 && wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
-				TransactionGenerator tg = new TransactionGenerator(params, pg, wallet);
 				genesisTx = tg.generateGenesisTransaction(pm, f, TimeUnit.MINUTES.toSeconds(0));
 				//TODO register listener before sending tx out, to avoid missing a confidence change
 				genesisTx.getConfidence().addEventListener(new Listener() {
@@ -215,20 +215,25 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-//		
-//		try {
-//			System.out.println("sendBroadcastAnnouncement");
-//			for(int i=0; i<50;i++) {
-//				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
-//					TimeUnit.MINUTES.sleep(1);
-//				} else {
-//					MixPartnerDiscovery.sendBroadcastAnnouncement(params, wallet, new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm, pg);
-//				}
-//			}
-//		} catch (InsufficientMoneyException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
+		
+		try {
+			System.out.println("sendBroadcastAnnouncement");
+			for(int i=0; i<50;i++) {
+				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+					try {
+						TimeUnit.MINUTES.sleep(1);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				} else {
+					tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), f, pm);
+				}
+			}
+		} catch (InsufficientMoneyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		//	try {
 		//		TimeUnit.MINUTES.sleep(15);
 		//	} catch (InterruptedException e1) {
