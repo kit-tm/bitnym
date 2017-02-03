@@ -387,7 +387,6 @@ public class Mixer {
 		assert(inSp != null);
 		//TODO add wished locktime
 		final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime-(10*60*150));
-		//TODO compute the right value as (input1 + input2 - fee)/2
 		Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
 		final TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 		byte[] serializedTx;
@@ -460,7 +459,9 @@ public class Mixer {
 
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
-							checkTx(penFinalTx, deserializeTransaction(arg0));
+							if(!checkTx(penFinalTx, deserializeTransaction(arg0))) {
+								System.out.println("checktx failed");
+							}
 							commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
 							ptp.exit();
 							//don't reuse hidden service, to not link pseudonyms
@@ -592,7 +593,6 @@ public class Mixer {
 		});
 		System.out.println("commited mixtx to wallet");
 		//TODO add confidence change event listener, then add to end of proof message
-		//TODO check consistency with signed tx
 	}
 	
 	

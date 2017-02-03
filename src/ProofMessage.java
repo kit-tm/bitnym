@@ -46,7 +46,6 @@ public class ProofMessage implements Serializable {
 	 */
 	
 	private static final Logger log = LoggerFactory.getLogger(ProofMessage.class);
-	//TODO add event listener for last transaction if blockheight is not at least 1
 	private static final long serialVersionUID = 1L;
 	private String filePath;
 	private List<Transaction> validationPath;
@@ -465,6 +464,28 @@ public class ProofMessage implements Serializable {
 			e.printStackTrace();
 		} catch (IOException e) {
 			e.printStackTrace();
+		}
+		
+		if(appearedInChainheight == 0 && validationPath.size() > 0) {
+			if(getLastTransaction().hasConfidence() && getLastTransaction().getConfidence().getConfidenceType().equals(ConfidenceType.BUILDING)) {
+				appearedInChainheight = getLastTransaction().getConfidence().getAppearedAtChainHeight();
+				System.out.println("set appeared in chainheight without listener to " + appearedInChainheight);
+			} else {
+				System.out.println("has no confidence, so set confidence listener to set the appeared in chainheight later on");
+				getLastTransaction().getConfidence().addEventListener(new Listener() {
+
+					@Override
+					public void onConfidenceChanged(TransactionConfidence arg0,
+							ChangeReason arg1) {
+						if(arg1.equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+							appearedInChainheight = arg0.getAppearedAtChainHeight();
+							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
+							getLastTransaction().getConfidence().removeEventListener(this);
+						}
+
+					}
+				});
+			}
 		}
 		
 	}
