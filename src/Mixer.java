@@ -5,6 +5,7 @@ import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
@@ -41,6 +42,7 @@ public class Mixer {
 	private NetworkParameters params;
 	private PeerGroup pg;
 	private BlockChain bc;
+	private List<MixFinishedEventListener> mfListeners;
 	
 	//get the onion mix adress from a broadcastannouncement
 	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
@@ -541,6 +543,7 @@ public class Mixer {
 		ownProof.writeToFile();
 		//TODO check later on that block is in blockchain, in case that program terminates, maybe a flag or something in proof messages
 		//that indicates this?
+		//TODO is this a duplicate? already add listener in addtransaction
 		rcvdTx.getConfidence().addEventListener(new TransactionConfidence.Listener() {
 			
 			@Override
@@ -557,6 +560,9 @@ public class Mixer {
 				}
 			}
 		});
+		for(MixFinishedEventListener l : mfListeners) {
+			l.onMixFinished();
+		}
 	}
 	
 	private void commitRcvdFinalTx(
@@ -592,10 +598,19 @@ public class Mixer {
 			}
 		});
 		System.out.println("commited mixtx to wallet");
+		for(MixFinishedEventListener l : mfListeners) {
+			l.onMixFinished();
+		}
 		//TODO add confidence change event listener, then add to end of proof message
 	}
 	
 	
+	public void addMixFinishedEventListener(MixFinishedEventListener listener) {
+		mfListeners.add(listener);
+	}
 	
+	public void removeMixFinishedEventListener(MixFinishedEventListener listener) {
+		mfListeners.remove(listener);
+	}
 	
 }

@@ -45,6 +45,8 @@ public class ProofMessage implements Serializable {
 	 * 
 	 */
 	
+	//TODO: refactor change listener to caller, not super important, but cleaner
+	
 	private static final Logger log = LoggerFactory.getLogger(ProofMessage.class);
 	private static final long serialVersionUID = 1L;
 	private String filePath;
@@ -52,6 +54,7 @@ public class ProofMessage implements Serializable {
 	private List<Integer> outputIndices;
 	private CLTVScriptPair sp;
 	private int appearedInChainheight;
+	private List<ProofConfidenceChangeEventListener> proofChangeListeners;
 	
 	public void setValidationPath(List<Transaction> validationPath) {
 		this.validationPath = validationPath;
@@ -252,6 +255,7 @@ public class ProofMessage implements Serializable {
 		dpeer.sendMessage(msg);
 		System.out.println("send getdatamessage to verify tx is in blockchain");
 		
+		//return when finished
 		monState.setMonitorState(true);
 		while(monState.getMonitorState()) {
 			synchronized (monitor) {
@@ -304,6 +308,9 @@ public class ProofMessage implements Serializable {
 					ChangeReason arg1) {
 				if(arg1.equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					appearedInChainheight = arg0.getAppearedAtChainHeight();
+					for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
+						l.onProofChanged();
+					}
 					tx.getConfidence().removeEventListener(this);
 					System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
 				}
@@ -414,6 +421,9 @@ public class ProofMessage implements Serializable {
 						if(arg1.equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 							appearedInChainheight = arg0.getAppearedAtChainHeight();
 							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
+							for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
+								l.onProofChanged();
+							}
 							getLastTransaction().getConfidence().removeEventListener(this);
 						}
 
@@ -480,6 +490,9 @@ public class ProofMessage implements Serializable {
 						if(arg1.equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 							appearedInChainheight = arg0.getAppearedAtChainHeight();
 							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
+							for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
+								l.onProofChanged();
+							}
 							getLastTransaction().getConfidence().removeEventListener(this);
 						}
 
@@ -496,6 +509,15 @@ public class ProofMessage implements Serializable {
 	
 	public String getFilePath() {
 		return this.filePath;
+	}
+	
+
+	public void addProofChangeEventListener(ProofConfidenceChangeEventListener listener) {
+		proofChangeListeners.add(listener);
+	}
+	
+	public void removeProofChangeEventListener(ProofConfidenceChangeEventListener listener) {
+		proofChangeListeners.remove(listener);
 	}
 
 }

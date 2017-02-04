@@ -42,6 +42,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	private List<Transaction> broadcasts;
 	private Wallet wallet;
 	private ProofMessage pm;
+	private List<BroadcastAnnouncementChangeEventListener> listeners;
 
 	public MixPartnerDiscovery(NetworkParameters params, PeerGroup pg, BlockChain bc, Wallet wallet, ProofMessage pm) {
 		this.pg = pg;
@@ -50,6 +51,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		this.wallet = wallet;
 		this.broadcasts = new ArrayList<Transaction>();
 		this.pm = pm;
+		this.listeners = new ArrayList<BroadcastAnnouncementChangeEventListener>();
 	}
 	
 	//method for experimenting
@@ -125,6 +127,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	public void onBlocksDownloaded(Peer arg0, Block arg1,
 			@Nullable FilteredBlock arg2, int arg3) {
 		System.out.println("received block");
+		boolean receivedBcastAnnouncmnt = false;
 		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 		for(Transaction tx : assocTxs.values()) {
 			System.out.println("from within mixpartner discovery " + tx);
@@ -132,6 +135,13 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(1).getScriptBytes())
 					&& wallet.findKeyFromPubKey(tx.getInput(1).getScriptSig().getPubKey()) == null) {
 				this.broadcasts.add(tx);
+				receivedBcastAnnouncmnt = true;
+			}
+		}
+		
+		if(receivedBcastAnnouncmnt) {
+			for(BroadcastAnnouncementChangeEventListener l : listeners) {
+				l.onBroadcastAnnouncementChanged();
 			}
 		}
 	}
@@ -154,7 +164,17 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		return this.broadcasts.size() > 0;
 	}
 	
+	public List<Transaction> getBroadcastAnnouncements() {
+		return this.broadcasts;
+	}
 	
+	public void addBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener l) {
+		this.listeners.add(l);
+	}
+	
+	public void removeBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener l) {
+		this.listeners.remove(l);
+	}
 	
 	
 }
