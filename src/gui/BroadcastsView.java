@@ -32,4 +32,7 @@ public class BroadcastsView extends JPanel {
 		
 	}
 
+	public JTextArea getDisplay() {
+		return this.display;
+	}
 }

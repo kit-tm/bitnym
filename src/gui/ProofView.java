@@ -33,4 +33,9 @@ public class ProofView extends JPanel {
 		this.add(scroll);
 		
 	}
+
+
+	public JTextArea getDisplay() {
+		return this.display;
+	}
 }

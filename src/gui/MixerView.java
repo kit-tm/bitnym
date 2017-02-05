@@ -17,9 +17,16 @@ public class MixerView extends JPanel {
 	private static final long serialVersionUID = -6595715731798690160L;
 	
 	
-	JTextField onion;
+	private JTextField onion;	
 
-	JButton mixBtn;
+	private JButton mixBtn;
+	
+	private JButton generateGenesisBtn;
+	
+	private JButton listenForMixBtn;
+
+
+	private JButton stopListeningForMixBtn;
 	
 	public MixerView() {
 		super();
@@ -35,5 +42,38 @@ public class MixerView extends JPanel {
 		mixBtn = new JButton("mix");
 		mixBtn.setPreferredSize(new Dimension(80,30));
 		this.add(mixBtn);
+		
+		generateGenesisBtn = new JButton("generate Genesis Transaction");
+		generateGenesisBtn.setPreferredSize(new Dimension(80,30));
+		this.add(generateGenesisBtn);
+		
+		listenForMixBtn = new JButton("listen for Mix");
+		listenForMixBtn.setPreferredSize(new Dimension(80,30));
+		this.add(listenForMixBtn);
+		
+		stopListeningForMixBtn = new JButton("Stop Listening For Mix");
+		stopListeningForMixBtn.setPreferredSize(new Dimension(130, 30));
+		this.add(stopListeningForMixBtn);
+		
+	}
+	
+	public JButton getMixBtn() {
+		return this.mixBtn;
+	}
+	
+	public String getOnionString() {
+		return onion.getText().toString();
+	}
+	
+	public JButton getGenGenesisBtn() {
+		return this.generateGenesisBtn;
+	}
+	
+	public JButton getListenForMixBtn() {
+		return this.listenForMixBtn;
+	}
+	
+	public JButton getStopListeningForMixBtn() {
+		return this.stopListeningForMixBtn;
 	}
 }
