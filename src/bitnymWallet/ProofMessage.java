@@ -88,7 +88,6 @@ public class ProofMessage implements Serializable {
 	//use certain proof message file
 	public ProofMessage(String path) {
 		//determines the corresponding output within the the mix txs
-		this.proofChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		this.sp = new CLTVScriptPair();
 		this.validationPath = new ArrayList<Transaction>();
 		this.outputIndices = new ArrayList<Integer>();
@@ -100,6 +99,7 @@ public class ProofMessage implements Serializable {
 			   FileInputStream fin = new FileInputStream(file);
 			   ObjectInputStream ois = new ObjectInputStream(fin);
 			   ProofMessage tmp = (ProofMessage) ois.readObject();
+			   this.proofChangeListeners = tmp.proofChangeListeners;
 			   this.outputIndices = tmp.outputIndices;
 			   this.validationPath = tmp.validationPath;
 			   this.sp = tmp.sp;
@@ -362,6 +362,7 @@ public class ProofMessage implements Serializable {
 	private void readObject(ObjectInputStream ois)
 			throws ClassNotFoundException, IOException {
 
+		proofChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		List vPath, oIndices;
 		List<Transaction> txList = new ArrayList<Transaction>();
 		List<Integer> intList = new ArrayList<Integer>();

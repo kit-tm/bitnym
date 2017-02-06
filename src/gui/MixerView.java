@@ -17,7 +17,11 @@ public class MixerView extends JPanel {
 	private static final long serialVersionUID = -6595715731798690160L;
 	
 	
-	private JTextField onion;	
+	private JTextField onion;
+	
+	private JTextField currentWalletValue;
+	
+	private JTextField currentNymValue;
 
 	private JButton mixBtn;
 	
@@ -55,6 +59,12 @@ public class MixerView extends JPanel {
 		stopListeningForMixBtn.setPreferredSize(new Dimension(130, 30));
 		this.add(stopListeningForMixBtn);
 		
+		currentWalletValue = new JTextField();
+		this.add(currentWalletValue);
+		
+		currentNymValue = new JTextField();
+		this.add(currentNymValue);
+		
 	}
 	
 	public JButton getMixBtn() {
@@ -75,5 +85,13 @@ public class MixerView extends JPanel {
 	
 	public JButton getStopListeningForMixBtn() {
 		return this.stopListeningForMixBtn;
+	}
+	
+	public JTextField getCurrentNymValue() {
+		return this.currentNymValue;
+	}
+	
+	public JTextField getCurrentWalletValue() {
+		return this.currentWalletValue;
 	}
 }

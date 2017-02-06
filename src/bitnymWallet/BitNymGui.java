@@ -86,7 +86,10 @@ public class BitNymGui extends JFrame {
 			public void onProofChanged() {
 				JOptionPane.showMessageDialog(null, "Mixtransaktion wurde in die Blockchain" +
 						" aufgenommen", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
-				pcontroller.getView().getDisplay().append(wallet.getLastTransaction().toString());
+				//might happen that we receive to times 
+//				if() {
+					pcontroller.getView().getDisplay().append(wallet.getLastTransaction().toString());
+//				}
 			}
 		});
 	}

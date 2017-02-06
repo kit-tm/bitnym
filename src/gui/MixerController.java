@@ -19,7 +19,9 @@ public class MixerController {
 			
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
-				wallet.mixWith(mixerView.getOnionString());				
+				wallet.mixWith(mixerView.getOnionString());
+				mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
+				mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
 			}
 		});
 		mixerView.getGenGenesisBtn().addActionListener(new ActionListener() {
@@ -27,6 +29,8 @@ public class MixerController {
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
 				wallet.generateGenesisTransaction();
+				mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
+				mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
 			}
 		});
 		
@@ -45,8 +49,13 @@ public class MixerController {
 				wallet.stopListeningForMix();
 			}
 		});
+		
+		mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
+		
+		mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
 	}
 	
+	//use this before loadView
 	public void loadWallet(BitNymWallet wallet) {
 		this.wallet = wallet;
 	}

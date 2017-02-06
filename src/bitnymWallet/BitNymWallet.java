@@ -338,5 +338,19 @@ public class BitNymWallet {
 	public void stopListeningForMix() {
 		m.closeListeningForMix();
 	}
+	
+	public Wallet getWallet() {
+		return this.wallet;
+	}
+
+
+
+	public String getPsynymValue() {
+		if(pm.getLastTransaction() != null) {
+			return pm.getLastTransactionOutput().getValue().toFriendlyString();
+		} else {
+			return "";
+		}
+	}
 
 }
