@@ -62,6 +62,7 @@ public class BroadcastAnnouncement {
 		return sbuilder.build();
 	}
 	
+	//builds a broadcastannouncement from the opreturn output
 	public static BroadcastAnnouncement deserialize(byte[] data) {
 		byte[] onionAdress = Arrays.copyOfRange(data, 7, 23);
 		byte[] mixValue = Arrays.copyOfRange(data, 23, 27);

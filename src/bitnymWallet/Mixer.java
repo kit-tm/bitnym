@@ -38,6 +38,7 @@ import edu.kit.tm.ptp.SendListener.State;
 
 public class Mixer {
 	private PTP ptp;
+	private BroadcastAnnouncement bca;
 	private Identifier mixPartnerAdress;
 	private ProofMessage ownProof, partnerProof;
 	private Wallet w;
@@ -45,10 +46,12 @@ public class Mixer {
 	private PeerGroup pg;
 	private BlockChain bc;
 	private List<MixFinishedEventListener> mfListeners;
+	private int lockTime;
 	
 	//get the onion mix adress from a broadcastannouncement
 	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
 		this.ptp = ptp;
+		this.bca = bca;
 		this.mixPartnerAdress = new Identifier(bca.getOnionAdress() + ".onion");
 		this.ownProof = pm;
 		this.w = w;
@@ -56,6 +59,7 @@ public class Mixer {
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
+		this.lockTime = 0; 
 	}
 	
 	
@@ -69,6 +73,7 @@ public class Mixer {
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
+		this.lockTime = 0;
 
 	}
 	
@@ -81,6 +86,7 @@ public class Mixer {
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
+		this.lockTime = 0;
 	}
 	
 	public void passiveMix(byte[] arg0) {
@@ -127,7 +133,9 @@ public class Mixer {
 				ECKey newPsnymKey = new ECKey();
 				w.importKey(newPsnymKey);
 				long unixTime = System.currentTimeMillis() / 1000L;
-				final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, unixTime-(10*60*150));
+				//TODO remove 10*60*150
+				//TODO use bitcoin bip113 time
+				final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, unixTime+lockTime-(10*60*150));
 				Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
 				TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 				rcvdTx.addOutput(newPsyNym);
@@ -394,7 +402,9 @@ public class Mixer {
 		final CLTVScriptPair inSp = ownProof.getScriptPair();
 		assert(inSp != null);
 		//TODO add wished locktime
-		final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime-(10*60*150));
+		//TODO remove (10*60*150)
+		//TODO use bitcoin bip113 time
+		final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime+this.lockTime-(10*60*150));
 		Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
 		final TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 		byte[] serializedTx;
@@ -621,6 +631,19 @@ public class Mixer {
 	
 	public void setMixPartnerAdress(String onion) {
 		this.mixPartnerAdress = new Identifier(onion);
+	}
+	
+	public void setOwnProof(ProofMessage pm) {
+		this.ownProof = pm;
+	}
+	
+	public void setBroadcastAnnouncement(BroadcastAnnouncement bca) {
+		this.bca = bca;
+	}
+
+
+	public void setLockTime(int lockTime) {
+		this.lockTime = lockTime;		
 	}
 	
 }

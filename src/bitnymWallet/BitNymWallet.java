@@ -3,6 +3,9 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -34,6 +37,8 @@ import edu.kit.tm.ptp.PTP;
 
 public class BitNymWallet {
 	
+	//TODO check before mixing that proof passed the bitcoin bip113 time, so that it is free to be spend
+	
 	private static final Logger log = LoggerFactory.getLogger(BitNymWallet.class);
 	public static Coin PSNYMVALUE = Coin.valueOf(200000);
 	public static Coin PROOF_OF_BURN = Coin.valueOf(50000);
@@ -48,13 +53,15 @@ public class BitNymWallet {
 	private TransactionGenerator tg;
 	private File walletFile;
 	private Wallet wallet;
-	private final ProofMessage pm;
+	private ProofMessage pm;
 	private SPVBlockStore spvbs;
 	private File bs;
 	private BlockChain bc;
 	private MixPartnerDiscovery mpd;
 	private Mixer m;
-	private List<ProofConfidenceChangeEventListener> proofChangeListeners;
+	//TODO move all listeners back to this class 
+	private List<ProofConfidenceChangeEventListener> proofChangeConfidenceListeners;
+	private List<ProofChangeEventListener> proofChangeListeners;
 	private List<BroadcastAnnouncementChangeEventListener> baListeners;
 	private List<MixFinishedEventListener> mfListeners;
 
@@ -65,6 +72,8 @@ public class BitNymWallet {
 		MainClass.params = TestNet3Params.get();
 		params = TestNet3Params.get();
 
+		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
+		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 
 
 		ptp = new PTP(System.getProperty("user.dir"));
@@ -176,7 +185,7 @@ public class BitNymWallet {
 			e1.printStackTrace();
 		}
 
-		mpd = new MixPartnerDiscovery(params, pg, bc, wallet, pm);
+		mpd = new MixPartnerDiscovery(params, pg, bc, wallet);
 		//bc.addNewBestBlockListener(mpd);
 
 		pg.addBlocksDownloadedEventListener(mpd);
@@ -202,12 +211,12 @@ public class BitNymWallet {
 	}
 	
 	
-	public void generateGenesisTransaction() {
+	public void generateGenesisTransaction(int lockTime) {
 		Transaction genesisTx;
 		try {
 			//generate genesis transaction if our proof is empty
 			if(pm.getValidationPath().size() == 0 && wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
-				genesisTx = tg.generateGenesisTransaction(pm, walletFile, TimeUnit.MINUTES.toSeconds(0));
+				genesisTx = tg.generateGenesisTransaction(pm, walletFile, lockTime);
 				//TODO register listener before sending tx out, to avoid missing a confidence change
 				genesisTx.getConfidence().addEventListener(new Listener() {
 
@@ -229,7 +238,7 @@ public class BitNymWallet {
 		}
 	}
 	
-	public void sendBroadcastAnnouncement() {
+	public void sendBroadcastAnnouncement(int lockTime) {
 		try {
 			System.out.println("sendBroadcastAnnouncement");
 			for(int i=0; i<50;i++) {
@@ -240,7 +249,7 @@ public class BitNymWallet {
 						e.printStackTrace();
 					}
 				} else {
-					tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), walletFile, pm);
+					tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), walletFile, pm, lockTime);
 				}
 			}
 		} catch (InsufficientMoneyException e) {
@@ -253,7 +262,8 @@ public class BitNymWallet {
 		}
 	}
 	
-	public void mixWith(String onionAdress) {
+	public void mixWith(String onionAdress, int lockTime) {
+		//TODO throw exception on not fulfilled preconditions
 		try {
 			for(int i=0; i<50;i++) {
 				//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
@@ -262,7 +272,8 @@ public class BitNymWallet {
 					TimeUnit.MINUTES.sleep(1);
 				} else {
 					m.setMixPartnerAdress(onionAdress);
-
+					assert(lockTime >= 0);
+					m.setLockTime(lockTime);
 					m.initiateMix();
 					//TODO remove this
 					TimeUnit.MINUTES.sleep(10);
@@ -275,8 +286,27 @@ public class BitNymWallet {
 		}		
 	}
 	
-	public void mixWithRandomFromBroadcasts() {
-		
+	public void mixWithRandomBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
+		try {
+			for(int i=0; i<50;i++) {
+				//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+				//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
+				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
+					TimeUnit.MINUTES.sleep(1);
+				} else {
+					m.setBroadcastAnnouncement(mpd.getRandomBroadcast());
+					assert(lockTime >= 0);
+					m.setLockTime(lockTime);
+					m.initiateMix();
+					//TODO remove this
+					TimeUnit.MINUTES.sleep(10);
+					break;
+				}
+			}
+
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}		
 	}
 	
 	public void mixWith(BroadcastAnnouncement ba) {
@@ -299,9 +329,16 @@ public class BitNymWallet {
 		return this.mpd.getBroadcastAnnouncements();
 	}
 	
-	public void addProofChangeEventListener(ProofConfidenceChangeEventListener listener) {
+	public void addProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
+		assert(proofChangeConfidenceListeners != null);
+		proofChangeConfidenceListeners.add(listener);
 		pm.addProofChangeEventListener(listener);
 	}
+	
+	public void addProofChangeEventListener(ProofChangeEventListener listener) {
+		proofChangeListeners.add(listener);
+	}
+	
 	
 	public void addBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener listener) {
 		mpd.addBroadcastAnnouncementChangeEventListener(listener);
@@ -311,8 +348,12 @@ public class BitNymWallet {
 		m.addMixFinishedEventListener(listener);
 	}
 	
-	public void removeProofChangeEventListener(ProofConfidenceChangeEventListener listener) {
+	public void removeProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
 		pm.removeProofChangeEventListener(listener);
+	}
+	
+	public void removeProofChangeEventListener(ProofChangeEventListener listener) {
+		proofChangeListeners.remove(listener);
 	}
 	
 	public void removeBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener listener) {
@@ -350,6 +391,20 @@ public class BitNymWallet {
 			return pm.getLastTransactionOutput().getValue().toFriendlyString();
 		} else {
 			return "";
+		}
+	}
+	
+	public void deleteProof() {
+		try {
+			Files.delete(Paths.get(pm.getFilePath()));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		pm = new ProofMessage();
+		m.setOwnProof(pm);
+		for(ProofChangeEventListener l : proofChangeListeners) {
+			l.onProofChanged();
 		}
 	}
 

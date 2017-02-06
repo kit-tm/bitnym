@@ -3,7 +3,10 @@ package gui;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
+import javax.swing.JOptionPane;
+
 import bitnymWallet.BitNymWallet;
+import bitnymWallet.NoBroadcastAnnouncementsException;
 
 public class MixerController {
 
@@ -19,7 +22,7 @@ public class MixerController {
 			
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
-				wallet.mixWith(mixerView.getOnionString());
+				wallet.mixWith(mixerView.getOnionString(), Integer.parseInt(mixerView.getLockTimeField().getText())*60);
 				mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
 				mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
 			}
@@ -28,7 +31,7 @@ public class MixerController {
 			
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
-				wallet.generateGenesisTransaction();
+				wallet.generateGenesisTransaction(Integer.parseInt(mixerView.getLockTimeField().getText())*60);
 				mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
 				mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
 			}
@@ -53,6 +56,30 @@ public class MixerController {
 		mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
 		
 		mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
+		
+		mixerView.getDeleteProofBtn().addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				wallet.deleteProof();
+			}
+		});
+		
+		mixerView.getMixWithRndmBroadcastBtn().addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				//TODO insert wallet.hasBroadcasts function so that caller can check,
+				//before calling
+				try {
+					wallet.mixWithRandomBroadcast(Integer.parseInt(mixerView.getLockTimeField().getText())*60);
+				} catch (NoBroadcastAnnouncementsException e) {
+					JOptionPane.showMessageDialog(null, "Keine BroadcastsAnnouncements zum " +
+							"mixen", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
+					e.printStackTrace();
+				}
+			}
+		});
 	}
 	
 	//use this before loadView

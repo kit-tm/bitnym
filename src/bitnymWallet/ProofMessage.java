@@ -88,6 +88,7 @@ public class ProofMessage implements Serializable {
 	//use certain proof message file
 	public ProofMessage(String path) {
 		//determines the corresponding output within the the mix txs
+		this.proofChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		this.sp = new CLTVScriptPair();
 		this.validationPath = new ArrayList<Transaction>();
 		this.outputIndices = new ArrayList<Integer>();
@@ -99,7 +100,6 @@ public class ProofMessage implements Serializable {
 			   FileInputStream fin = new FileInputStream(file);
 			   ObjectInputStream ois = new ObjectInputStream(fin);
 			   ProofMessage tmp = (ProofMessage) ois.readObject();
-			   this.proofChangeListeners = tmp.proofChangeListeners;
 			   this.outputIndices = tmp.outputIndices;
 			   this.validationPath = tmp.validationPath;
 			   this.sp = tmp.sp;
@@ -312,7 +312,7 @@ public class ProofMessage implements Serializable {
 				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					appearedInChainheight = arg0.getAppearedAtChainHeight();
 					for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
-						l.onProofChanged();
+						l.onProofConfidenceChanged();
 					}
 					tx.getConfidence().removeEventListener(this);
 					System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
@@ -426,7 +426,7 @@ public class ProofMessage implements Serializable {
 							appearedInChainheight = arg0.getAppearedAtChainHeight();
 							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
 							for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
-								l.onProofChanged();
+								l.onProofConfidenceChanged();
 							}
 							getLastTransaction().getConfidence().removeEventListener(this);
 						}
@@ -495,7 +495,7 @@ public class ProofMessage implements Serializable {
 							appearedInChainheight = arg0.getAppearedAtChainHeight();
 							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
 							for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
-								l.onProofChanged();
+								l.onProofConfidenceChanged();
 							}
 							getLastTransaction().getConfidence().removeEventListener(this);
 						}

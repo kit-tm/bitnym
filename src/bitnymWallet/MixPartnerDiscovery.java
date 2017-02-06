@@ -42,16 +42,14 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	private Block head;
 	private List<Transaction> broadcasts;
 	private Wallet wallet;
-	private ProofMessage pm;
 	private List<BroadcastAnnouncementChangeEventListener> listeners;
 
-	public MixPartnerDiscovery(NetworkParameters params, PeerGroup pg, BlockChain bc, Wallet wallet, ProofMessage pm) {
+	public MixPartnerDiscovery(NetworkParameters params, PeerGroup pg, BlockChain bc, Wallet wallet) {
 		this.pg = pg;
 		this.bc = bc;
 		this.head = null;
 		this.wallet = wallet;
 		this.broadcasts = new ArrayList<Transaction>();
-		this.pm = pm;
 		this.listeners = new ArrayList<BroadcastAnnouncementChangeEventListener>();
 	}
 	
@@ -175,6 +173,16 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	
 	public void removeBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener l) {
 		this.listeners.remove(l);
+	}
+
+	public BroadcastAnnouncement getRandomBroadcast() throws NoBroadcastAnnouncementsException {
+		if(broadcasts.size() == 0) {
+			throw new NoBroadcastAnnouncementsException();
+		}
+		Random r = new Random();
+		Transaction tx = broadcasts.get(r.nextInt(broadcasts.size()));
+		//TODO substitute magic number 1 for constant "outputOffsetOfBroadcastAnnouncementOpReturn" 
+		return BroadcastAnnouncement.deserialize(tx.getOutput(1).getScriptBytes());
 	}
 	
 	

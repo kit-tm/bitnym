@@ -80,16 +80,24 @@ public class BitNymGui extends JFrame {
 				
 			}
 		});
-		wallet.addProofChangeEventListener(new ProofConfidenceChangeEventListener() {
+		wallet.addProofConfidenceChangeEventListener(new ProofConfidenceChangeEventListener() {
 			
 			@Override
-			public void onProofChanged() {
+			public void onProofConfidenceChanged() {
 				JOptionPane.showMessageDialog(null, "Mixtransaktion wurde in die Blockchain" +
 						" aufgenommen", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
 				//might happen that we receive to times 
 //				if() {
 					pcontroller.getView().getDisplay().append(wallet.getLastTransaction().toString());
 //				}
+			}
+		});
+		
+		wallet.addProofChangeEventListener(new ProofChangeEventListener() {
+			
+			@Override
+			public void onProofChanged() {
+				pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());
 			}
 		});
 	}

@@ -68,6 +68,7 @@ public class TransactionGenerator {
 		//add pseudonym output
 		ECKey psnymKey = new ECKey();
 		long unixTime = System.currentTimeMillis() / 1000L;
+		//TODO use bitcoin bip113 time
 		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime-(10*60*500));
 		System.out.println(sp.toString());
 		assert(sp != null);
@@ -138,7 +139,7 @@ public class TransactionGenerator {
 	
 	
 	
-	public void sendBroadcastAnnouncement(BroadcastAnnouncement ba, File f, ProofMessage pm) throws InsufficientMoneyException {
+	public void sendBroadcastAnnouncement(BroadcastAnnouncement ba, File f, ProofMessage pm, int lockTime) throws InsufficientMoneyException {
 		//build transaction
 		Transaction tx = new Transaction(params);
 		
@@ -149,7 +150,7 @@ public class TransactionGenerator {
 		long unixTime = System.currentTimeMillis() / 1000L;
 		//TODO use bitcoin nets median time
 		tx.setLockTime(unixTime-(10*60*150));
-		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime-(10*60*150));
+		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, unixTime+lockTime-(10*60*150));
 		w.importKey(psnymKey);
 		tx.addOutput(new TransactionOutput(params, tx, pm.getLastTransactionOutput().getValue().subtract(estimateBroadcastFee()), sp.getPubKeyScript().getProgram()));
 		tx.addOutput(Coin.ZERO, s);
