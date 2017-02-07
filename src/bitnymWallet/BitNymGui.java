@@ -100,5 +100,13 @@ public class BitNymGui extends JFrame {
 				pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());
 			}
 		});
+		wallet.addTimeChangedEventListener(new TimeChangedEventListener() {
+
+			@Override
+			public void onTimeChangedEvent() {
+				mcontroller.getView().getCurrentBip113Time().setText(wallet.getCurrentBIP113Time().toString());
+			}
+			
+		});
 	}
 }

@@ -6,6 +6,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Date;
 
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.ECKey;
@@ -172,7 +173,7 @@ public class CLTVScriptPair implements Serializable {
 		return challengeLockTime > currentBitcoinBIP113Time(bc);
 	}
 
-	private long currentBitcoinBIP113Time(BlockChain bc) {
+	public static long currentBitcoinBIP113Time(BlockChain bc) {
 		StoredBlock headBlock = bc.getChainHead();
 		StoredBlock iteratingBlock = headBlock;
 		long[] blockTimeStamps = new long[11];
@@ -185,6 +186,8 @@ public class CLTVScriptPair implements Serializable {
 			}
 		}
 		Arrays.sort(blockTimeStamps);
+		System.out.println(blockTimeStamps[5]);
+		System.out.println("current bip113 time: " + new Date(blockTimeStamps[5]));
 		return blockTimeStamps[5];
 	}
 

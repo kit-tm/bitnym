@@ -22,6 +22,8 @@ public class MixerView extends JPanel {
 	private JTextField currentWalletValue;
 	
 	private JTextField currentNymValue;
+	
+	private JTextField currentBip113Time;
 
 	private JButton mixBtn;
 	
@@ -91,6 +93,12 @@ public class MixerView extends JPanel {
 		gbc.gridy = 3;
 		this.add(currentNymValue, gbc);
 		
+		currentBip113Time = new JTextField();
+		currentBip113Time.setEditable(false);
+		gbc.gridx = 0;
+		gbc.gridy = 4;
+		this.add(currentBip113Time, gbc);
+		
 		deleteProofBtn = new JButton("Delete Proof Message");
 		deleteProofBtn.setPreferredSize(new Dimension(220,30));
 		gbc.gridx = 3;
@@ -151,5 +159,9 @@ public class MixerView extends JPanel {
 	
 	public JTextField getLockTimeField() {
 		return this.lockTimeField;
+	}
+
+	public JTextField getCurrentBip113Time() {
+		return this.currentBip113Time;
 	}
 }

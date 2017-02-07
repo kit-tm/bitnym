@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -16,10 +17,13 @@ import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
+import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionConfidence;
+import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
+import org.bitcoinj.core.listeners.NewBestBlockListener;
 import org.bitcoinj.core.listeners.PeerConnectedEventListener;
 import org.bitcoinj.net.BlockingClientManager;
 import org.bitcoinj.net.discovery.DnsDiscovery;
@@ -29,6 +33,7 @@ import org.bitcoinj.store.SPVBlockStore;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.Wallet.BalanceType;
+import org.bitcoinj.wallet.listeners.WalletReorganizeEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +43,7 @@ import edu.kit.tm.ptp.PTP;
 public class BitNymWallet {
 	
 	//TODO check before mixing that proof passed the bitcoin bip113 time, so that it is free to be spend
+	//TODO call timechangedevent listeners on new bestblock or reorganize
 	
 	private static final Logger log = LoggerFactory.getLogger(BitNymWallet.class);
 	public static Coin PSNYMVALUE = Coin.valueOf(200000);
@@ -62,6 +68,7 @@ public class BitNymWallet {
 	//TODO move all listeners back to this class 
 	private List<ProofConfidenceChangeEventListener> proofChangeConfidenceListeners;
 	private List<ProofChangeEventListener> proofChangeListeners;
+	private List<TimeChangedEventListener> timeChangedListeners;
 	private List<BroadcastAnnouncementChangeEventListener> baListeners;
 	private List<MixFinishedEventListener> mfListeners;
 
@@ -74,6 +81,7 @@ public class BitNymWallet {
 
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
+		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
 
 
 		ptp = new PTP(System.getProperty("user.dir"));
@@ -201,6 +209,25 @@ public class BitNymWallet {
 
 		//sanity check, that the protocol identifier isn't overwritten by a new bloom filter etc
 
+		wallet.addReorganizeEventListener(new WalletReorganizeEventListener() {
+			
+			@Override
+			public void onReorganize(Wallet arg0) {
+				for(TimeChangedEventListener l : timeChangedListeners) {
+					l.onTimeChangedEvent();
+				}
+			}
+		});
+		bc.addNewBestBlockListener(new NewBestBlockListener() {
+			
+			@Override
+			public void notifyNewBestBlock(StoredBlock arg0)
+					throws VerificationException {
+				for(TimeChangedEventListener l : timeChangedListeners) {
+					l.onTimeChangedEvent();
+				}
+			}
+		});
 	}
 	
 	
@@ -406,6 +433,23 @@ public class BitNymWallet {
 		for(ProofChangeEventListener l : proofChangeListeners) {
 			l.onProofChanged();
 		}
+	}
+
+
+
+	public Date getCurrentBIP113Time() {
+		return new Date(((long) CLTVScriptPair.currentBitcoinBIP113Time(bc))*1000);
+	}
+
+
+
+	public void addTimeChangedEventListener(
+			TimeChangedEventListener listener) {
+		this.timeChangedListeners.add(listener);
+	}
+	
+	public void removeTimeChangedEventListener(TimeChangedEventListener listener) {
+		this.timeChangedListeners.remove(listener);
 	}
 
 }

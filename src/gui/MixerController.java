@@ -80,6 +80,7 @@ public class MixerController {
 				}
 			}
 		});
+		mixerView.getCurrentBip113Time().setText(wallet.getCurrentBIP113Time().toString());
 	}
 	
 	//use this before loadView
