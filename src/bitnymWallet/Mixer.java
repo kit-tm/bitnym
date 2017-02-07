@@ -135,7 +135,7 @@ public class Mixer {
 				long unixTime = System.currentTimeMillis() / 1000L;
 				//TODO remove 10*60*150
 				//TODO use bitcoin bip113 time
-				final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, unixTime+lockTime-(10*60*150));
+				final CLTVScriptPair outSp = new CLTVScriptPair(newPsnymKey, CLTVScriptPair.currentBitcoinBIP113Time(bc)+lockTime);
 				Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
 				TransactionOutput newPsyNym = new TransactionOutput(params, rcvdTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 				rcvdTx.addOutput(newPsyNym);
@@ -384,7 +384,7 @@ public class Mixer {
 		final Transaction mixTx = new Transaction(params);
 		long currentUnixTime = System.currentTimeMillis() / 1000L;
 		System.out.println("set locktime of tx to " + String.valueOf(currentUnixTime-(10*60*150)));
-		mixTx.setLockTime(currentUnixTime-(10*60*150));
+		mixTx.setLockTime(CLTVScriptPair.currentBitcoinBIP113Time(bc));
 		mixTx.addInput(this.ownProof.getLastTransactionOutput());
 		//just needs to be anything else than uint_max, so that nlocktime is really used
 		mixTx.getInput(0).setSequenceNumber(3);
@@ -404,7 +404,7 @@ public class Mixer {
 		//TODO add wished locktime
 		//TODO remove (10*60*150)
 		//TODO use bitcoin bip113 time
-		final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, unixTime+this.lockTime-(10*60*150));
+		final CLTVScriptPair outSp = new CLTVScriptPair(psnymKey, CLTVScriptPair.currentBitcoinBIP113Time(bc)+this.lockTime);
 		Coin newPsyNymValue = computeValueOfNewPsyNyms(ownProof.getLastTransactionOutput().getValue(), partnerProof.getLastTransactionOutput().getValue(), Transaction.DEFAULT_TX_FEE);
 		final TransactionOutput newPsyNym = new TransactionOutput(params, mixTx, newPsyNymValue, outSp.getPubKeyScript().getProgram());
 		byte[] serializedTx;

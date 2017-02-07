@@ -186,8 +186,6 @@ public class CLTVScriptPair implements Serializable {
 			}
 		}
 		Arrays.sort(blockTimeStamps);
-		System.out.println(blockTimeStamps[5]);
-		System.out.println("current bip113 time: " + new Date(blockTimeStamps[5]));
 		return blockTimeStamps[5];
 	}
 

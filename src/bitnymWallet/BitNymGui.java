@@ -88,7 +88,7 @@ public class BitNymGui extends JFrame {
 						" aufgenommen", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
 				//might happen that we receive to times 
 //				if() {
-					pcontroller.getView().getDisplay().append(wallet.getLastTransaction().toString());
+					pcontroller.getView().getDisplay().setText((wallet.getProofMessageString()));
 //				}
 			}
 		});

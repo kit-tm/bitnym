@@ -55,7 +55,8 @@ public class ProofMessage implements Serializable {
 	private List<Integer> outputIndices;
 	private CLTVScriptPair sp;
 	private int appearedInChainheight;
-	private List<ProofConfidenceChangeEventListener> proofChangeListeners;
+	private List<ProofConfidenceChangeEventListener> proofConfidenceChangeListeners;
+	private List<ProofChangeEventListener> proofChangeListeners;
 	
 	public void setValidationPath(List<Transaction> validationPath) {
 		this.validationPath = validationPath;
@@ -88,7 +89,8 @@ public class ProofMessage implements Serializable {
 	//use certain proof message file
 	public ProofMessage(String path) {
 		//determines the corresponding output within the the mix txs
-		this.proofChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
+		this.proofConfidenceChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
+		this.proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		this.sp = new CLTVScriptPair();
 		this.validationPath = new ArrayList<Transaction>();
 		this.outputIndices = new ArrayList<Integer>();
@@ -311,7 +313,7 @@ public class ProofMessage implements Serializable {
 				//TODO make sure that listener is only registered once, and not in many different places
 				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					appearedInChainheight = arg0.getAppearedAtChainHeight();
-					for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
+					for(ProofConfidenceChangeEventListener l : proofConfidenceChangeListeners) {
 						l.onProofConfidenceChanged();
 					}
 					tx.getConfidence().removeEventListener(this);
@@ -320,6 +322,9 @@ public class ProofMessage implements Serializable {
 				
 			}
 		});
+		for(ProofChangeEventListener l : proofChangeListeners) {
+			l.onProofChanged();
+		}
 	}
 	
 	public Transaction getLastTransaction() {
@@ -362,7 +367,7 @@ public class ProofMessage implements Serializable {
 	private void readObject(ObjectInputStream ois)
 			throws ClassNotFoundException, IOException {
 
-		proofChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
+		proofConfidenceChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		List vPath, oIndices;
 		List<Transaction> txList = new ArrayList<Transaction>();
 		List<Integer> intList = new ArrayList<Integer>();
@@ -425,7 +430,7 @@ public class ProofMessage implements Serializable {
 						if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 							appearedInChainheight = arg0.getAppearedAtChainHeight();
 							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
-							for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
+							for(ProofConfidenceChangeEventListener l : proofConfidenceChangeListeners) {
 								l.onProofConfidenceChanged();
 							}
 							getLastTransaction().getConfidence().removeEventListener(this);
@@ -480,29 +485,32 @@ public class ProofMessage implements Serializable {
 			e.printStackTrace();
 		}
 		
-		if(appearedInChainheight == 0 && validationPath.size() > 0) {
-			if(getLastTransaction().hasConfidence() && getLastTransaction().getConfidence().getConfidenceType().equals(ConfidenceType.BUILDING)) {
-				appearedInChainheight = getLastTransaction().getConfidence().getAppearedAtChainHeight();
-				System.out.println("set appeared in chainheight without listener to " + appearedInChainheight);
-			} else {
-				System.out.println("has no confidence, so set confidence listener to set the appeared in chainheight later on");
-				getLastTransaction().getConfidence().addEventListener(new Listener() {
-
-					@Override
-					public void onConfidenceChanged(TransactionConfidence arg0,
-							ChangeReason arg1) {
-						if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
-							appearedInChainheight = arg0.getAppearedAtChainHeight();
-							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
-							for(ProofConfidenceChangeEventListener l : proofChangeListeners) {
-								l.onProofConfidenceChanged();
-							}
-							getLastTransaction().getConfidence().removeEventListener(this);
-						}
-
-					}
-				});
-			}
+//		if(appearedInChainheight == 0 && validationPath.size() > 0) {
+//			if(getLastTransaction().hasConfidence() && getLastTransaction().getConfidence().getConfidenceType().equals(ConfidenceType.BUILDING)) {
+//				appearedInChainheight = getLastTransaction().getConfidence().getAppearedAtChainHeight();
+//				System.out.println("set appeared in chainheight without listener to " + appearedInChainheight);
+//			} else {
+//				System.out.println("has no confidence, so set confidence listener to set the appeared in chainheight later on");
+//				getLastTransaction().getConfidence().addEventListener(new Listener() {
+//
+//					@Override
+//					public void onConfidenceChanged(TransactionConfidence arg0,
+//							ChangeReason arg1) {
+//						if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+//							appearedInChainheight = arg0.getAppearedAtChainHeight();
+//							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
+//							for(ProofConfidenceChangeEventListener l : proofConfidenceChangeListeners) {
+//								l.onProofConfidenceChanged();
+//							}
+//							getLastTransaction().getConfidence().removeEventListener(this);
+//						}
+//
+//					}
+//				});
+//			}
+//		}
+		for(ProofChangeEventListener l : proofChangeListeners) {
+			l.onProofChanged();
 		}
 		
 	}
@@ -516,12 +524,21 @@ public class ProofMessage implements Serializable {
 	}
 	
 
-	public void addProofChangeEventListener(ProofConfidenceChangeEventListener listener) {
-		proofChangeListeners.add(listener);
+	public void addProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
+		proofConfidenceChangeListeners.add(listener);
 	}
 	
-	public void removeProofChangeEventListener(ProofConfidenceChangeEventListener listener) {
-		proofChangeListeners.remove(listener);
+	public void removeProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
+		proofConfidenceChangeListeners.remove(listener);
+	}
+
+	public void addProofChangeEventListener(ProofChangeEventListener listener) {
+		this.proofChangeListeners.add(listener);
+	}
+
+	public void removeProofChangeEventListener(
+			ProofChangeEventListener listener) {
+		this.proofChangeListeners.remove(listener);
 	}
 
 }

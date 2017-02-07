@@ -200,7 +200,7 @@ public class BitNymWallet {
 		System.out.println("addblocksdownloadedeventlistener");
 
 
-		tg = new TransactionGenerator(params, pg, wallet);
+		tg = new TransactionGenerator(params, pg, wallet, bc);
 		
 		m = new Mixer(ptp, pm, wallet, params, pg, bc);
 
@@ -359,10 +359,11 @@ public class BitNymWallet {
 	public void addProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
 		assert(proofChangeConfidenceListeners != null);
 		proofChangeConfidenceListeners.add(listener);
-		pm.addProofChangeEventListener(listener);
+		pm.addProofConfidenceChangeEventListener(listener);
 	}
 	
 	public void addProofChangeEventListener(ProofChangeEventListener listener) {
+		pm.addProofChangeEventListener(listener);
 		proofChangeListeners.add(listener);
 	}
 	
@@ -376,10 +377,12 @@ public class BitNymWallet {
 	}
 	
 	public void removeProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
-		pm.removeProofChangeEventListener(listener);
+		pm.removeProofConfidenceChangeEventListener(listener);
+		proofChangeConfidenceListeners.remove(listener);
 	}
 	
 	public void removeProofChangeEventListener(ProofChangeEventListener listener) {
+		pm.removeProofChangeEventListener(listener);
 		proofChangeListeners.remove(listener);
 	}
 	
@@ -429,6 +432,12 @@ public class BitNymWallet {
 			e.printStackTrace();
 		}
 		pm = new ProofMessage();
+		for(ProofConfidenceChangeEventListener listener : proofChangeConfidenceListeners) {
+			pm.addProofConfidenceChangeEventListener(listener);
+		}
+		for(ProofChangeEventListener listener : proofChangeListeners) {
+			pm.addProofChangeEventListener(listener);
+		}
 		m.setOwnProof(pm);
 		for(ProofChangeEventListener l : proofChangeListeners) {
 			l.onProofChanged();
