@@ -106,6 +106,8 @@ public class ProofMessage implements Serializable {
 			   this.validationPath = tmp.validationPath;
 			   this.sp = tmp.sp;
 			   this.appearedInChainheight = tmp.appearedInChainheight;
+			   this.proofChangeListeners = tmp.proofChangeListeners;
+			   this.proofConfidenceChangeListeners = tmp.proofConfidenceChangeListeners;
 			   //TODO register listener here, not at readobject
 			   ois.close();
 			   fin.close();
@@ -230,12 +232,6 @@ public class ProofMessage implements Serializable {
 			public void onBlocksDownloaded(Peer arg0, Block arg1,
 					@Nullable FilteredBlock arg2, int arg3) {
 				System.out.println("execute onblocksdownloaded listener on block + " + arg2.getBlockHeader().getHashAsString());
-//				Map<Sha256Hash, Transaction> asscTxs = arg2.getAssociatedTransactions();
-//				for(Transaction tx : asscTxs.values()) {
-//					if(tx.equals(getLastTransaction())) {
-//						//check merkle tree, to make sure it is in the block
-//					}
-//				}
 				List<Sha256Hash> matchedHashesOut = new ArrayList<>();
 				PartialMerkleTree tree = arg2.getPartialMerkleTree();
 				Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
@@ -368,6 +364,7 @@ public class ProofMessage implements Serializable {
 			throws ClassNotFoundException, IOException {
 
 		proofConfidenceChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
+		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		List vPath, oIndices;
 		List<Transaction> txList = new ArrayList<Transaction>();
 		List<Integer> intList = new ArrayList<Integer>();
@@ -508,7 +505,7 @@ public class ProofMessage implements Serializable {
 //					}
 //				});
 //			}
-//		}
+//		}	
 		for(ProofChangeEventListener l : proofChangeListeners) {
 			l.onProofChanged();
 		}
@@ -539,6 +536,22 @@ public class ProofMessage implements Serializable {
 	public void removeProofChangeEventListener(
 			ProofChangeEventListener listener) {
 		this.proofChangeListeners.remove(listener);
+	}
+	
+	public List<ProofChangeEventListener> getProofChangeEventListeners() {
+		return this.proofChangeListeners;
+	}
+	
+	public void setProofChangeEventListeners(List<ProofChangeEventListener> listeners) {
+		this.proofChangeListeners = listeners;
+	}
+	
+	public List<ProofConfidenceChangeEventListener> getProofConfidenceChangeEventListeners() {
+		return this.proofConfidenceChangeListeners;
+	}
+	
+	public void setProofConfidenceChangeEventListeners(List<ProofConfidenceChangeEventListener> listeners) {
+		this.proofConfidenceChangeListeners = listeners;
 	}
 
 }

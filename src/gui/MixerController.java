@@ -81,6 +81,16 @@ public class MixerController {
 			}
 		});
 		mixerView.getCurrentBip113Time().setText(wallet.getCurrentBIP113Time().toString());
+		
+		mixerView.getGenerateBroadcastBtn().addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				wallet.sendBroadcastAnnouncement(Integer.parseInt(mixerView.getLockTimeField().getText())*60);
+				mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
+				mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
+			}
+		});
 	}
 	
 	//use this before loadView

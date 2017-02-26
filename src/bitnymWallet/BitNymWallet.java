@@ -1,4 +1,6 @@
 package bitnymWallet;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -12,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.BlockChain;
+import org.bitcoinj.core.BloomFilter;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
@@ -33,6 +36,7 @@ import org.bitcoinj.store.SPVBlockStore;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.Wallet.BalanceType;
+import org.bitcoinj.wallet.listeners.WalletChangeEventListener;
 import org.bitcoinj.wallet.listeners.WalletReorganizeEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -152,29 +156,22 @@ public class BitNymWallet {
 
 			@Override
 			public void onPeerConnected(Peer arg0, int arg1) {
-				arg0.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);			
+				BloomFilter filter = arg0.getBloomFilter();
+				filter.insert(BroadcastAnnouncement.magicNumber);			
+				arg0.setBloomFilter(filter);
 			}
 		});
-		for(Peer p : pg.getConnectedPeers()) {
-			p.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
-		}
-		//Peer downloadpeer = pg.getDownloadPeer();
-
-
-		//downloadpeer.setBloomFilter(filter);
-		//downloadpeer.getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
-		//		javax.swing.Timer t = new javax.swing.Timer( 1000, new ActionListener() {
-		//			  public void actionPerformed( ActionEvent e ) {
-		//			    pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
-		//			    //pg.getDownloadPeer().setBloomFilter(filter);
-		//			    //try setbloomfilter(getbloomfilter.insert(magicnumber), cause setbloomfilter causes resend, insert doesn't causes resend
-		//			  }
-		//			});
-		//		t.start();
+		insertIdentifierIntoFilter();
+		javax.swing.Timer t = new javax.swing.Timer( 1000, new ActionListener() {
+			@Override
+			  public void actionPerformed( ActionEvent e ) {
+				assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+			  }
+			});
+		t.start();
 		System.out.println("bloom filter assertion");
 		//pg.getDownloadPeer().setBloomFilter(filter);
 		log.info("insert our broadcast transaction identifier string, into bloom filter of current download peer");
-		pg.getDownloadPeer().getBloomFilter().insert(BroadcastAnnouncement.magicNumber);
 		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 
 
@@ -228,6 +225,30 @@ public class BitNymWallet {
 				}
 			}
 		});
+		
+		wallet.addChangeEventListener(new WalletChangeEventListener() {
+			
+			@Override
+			public void onWalletChanged(Wallet arg0) {	
+				insertIdentifierIntoFilter();
+			}
+		});
+	}
+
+
+
+	private void insertIdentifierIntoFilter() {
+		for(Peer p : pg.getConnectedPeers()) {
+			BloomFilter filter = p.getBloomFilter();
+			filter.insert(BroadcastAnnouncement.magicNumber);
+			p.setBloomFilter(filter);
+		}
+		Peer downloadpeer = pg.getDownloadPeer();
+
+
+		BloomFilter filter = downloadpeer.getBloomFilter();
+		filter.insert(BroadcastAnnouncement.magicNumber);
+		downloadpeer.setBloomFilter(filter);
 	}
 	
 	
@@ -268,24 +289,13 @@ public class BitNymWallet {
 	public void sendBroadcastAnnouncement(int lockTime) {
 		try {
 			System.out.println("sendBroadcastAnnouncement");
-			for(int i=0; i<50;i++) {
-				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
-					try {
-						TimeUnit.MINUTES.sleep(1);
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-				} else {
-					tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), 10, 10), walletFile, pm, lockTime);
-				}
+			if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+				return;
+			} else {
+				tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), pm.getLastTransactionOutput().getValue().getValue(), 10), walletFile, pm, lockTime);
 			}
 		} catch (InsufficientMoneyException e) {
 			e.printStackTrace();
-		}
-		try {
-			TimeUnit.MINUTES.sleep(15);
-		} catch (InterruptedException e1) {
-			e1.printStackTrace();
 		}
 	}
 	
@@ -459,6 +469,12 @@ public class BitNymWallet {
 	
 	public void removeTimeChangedEventListener(TimeChangedEventListener listener) {
 		this.timeChangedListeners.remove(listener);
+	}
+
+
+
+	public String getBroadcastAnnouncementsString() {
+		return this.mpd.getBroadcastAnnouncements().toString();
 	}
 
 }

@@ -122,6 +122,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		searchCurrentBlockForPartners();
 	}
 	
+	//TODO getPubKey might lead to an exception, use try-catch
 	@Override
 	public void onBlocksDownloaded(Peer arg0, Block arg1,
 			@Nullable FilteredBlock arg2, int arg3) {
@@ -129,12 +130,16 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		boolean receivedBcastAnnouncmnt = false;
 		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 		for(Transaction tx : assocTxs.values()) {
-			System.out.println("from within mixpartner discovery " + tx);
-			//TODO getPubKey might lead to an exception, use try-catch
-			if(BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(1).getScriptBytes())
-					&& wallet.findKeyFromPubKey(tx.getInput(1).getScriptSig().getPubKey()) == null) {
-				this.broadcasts.add(tx);
-				receivedBcastAnnouncmnt = true;
+			System.out.println("from within mixpartner discovery " + tx);			
+			if(tx.getOutputs().size() > 1 &&
+					BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(1).getScriptBytes()))
+					//&& !wallet.isTransactionRelevant(tx)) {
+				//tx.getInput(0).getScriptSig().getChunks().get(0)
+					{
+				if(!this.broadcasts.contains(tx) && wallet.getTransaction(tx.getHash()) == null) {
+					this.broadcasts.add(tx);
+					receivedBcastAnnouncmnt = true;
+				}
 			}
 		}
 		

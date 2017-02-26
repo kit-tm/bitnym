@@ -32,10 +32,10 @@ public class MixerView extends JPanel {
 	private JButton listenForMixBtn;
 	
 	private JButton deleteProofBtn;
-
+	
+	private JButton generateBroadcastBtn;
 
 	private JButton stopListeningForMixBtn;
-
 
 	private JButton mixWithRndmBroadcastBtn;
 
@@ -111,6 +111,12 @@ public class MixerView extends JPanel {
 		gbc.gridy = 5;
 		this.add(mixWithRndmBroadcastBtn, gbc);
 		
+		generateBroadcastBtn = new JButton("Generate BroadcastTX");
+		generateBroadcastBtn.setPreferredSize(new Dimension(220,30));
+		gbc.gridx = 3;
+		gbc.gridy = 6;
+		this.add(generateBroadcastBtn, gbc);
+		
 		lockTimeField = new JTextField();
 		lockTimeField.setText("0");
 		lockTimeField.setPreferredSize(new Dimension(220, 30));
@@ -163,5 +169,9 @@ public class MixerView extends JPanel {
 
 	public JTextField getCurrentBip113Time() {
 		return this.currentBip113Time;
+	}
+	
+	public JButton getGenerateBroadcastBtn() {
+		return this.generateBroadcastBtn;
 	}
 }

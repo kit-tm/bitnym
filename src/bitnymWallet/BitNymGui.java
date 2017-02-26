@@ -32,6 +32,7 @@ public class BitNymGui extends JFrame {
 		JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 		
 		bcontroller = new BroadcastsController();
+		bcontroller.loadWallet(wallet);
 		bcontroller.loadView();
 		
 		ccontroller = new ConsoleController();
@@ -98,6 +99,13 @@ public class BitNymGui extends JFrame {
 			@Override
 			public void onProofChanged() {
 				pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());
+			}
+		});
+		wallet.addBroadcastAnnouncementChangeEventListener(new BroadcastAnnouncementChangeEventListener() {
+			
+			@Override
+			public void onBroadcastAnnouncementChanged() {
+				bcontroller.getView().getDisplay().setText(wallet.getBroadcastAnnouncementsString());				
 			}
 		});
 		wallet.addTimeChangedEventListener(new TimeChangedEventListener() {

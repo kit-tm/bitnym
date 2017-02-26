@@ -14,5 +14,7 @@ public class ConsoleController {
 	public ConsoleView getView() {
 		return this.consoleView;
 	}
+	
+	
 
 }

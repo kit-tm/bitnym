@@ -384,7 +384,7 @@ public class Mixer {
 		final Transaction mixTx = new Transaction(params);
 		long currentUnixTime = System.currentTimeMillis() / 1000L;
 		System.out.println("set locktime of tx to " + String.valueOf(currentUnixTime-(10*60*150)));
-		mixTx.setLockTime(CLTVScriptPair.currentBitcoinBIP113Time(bc));
+		mixTx.setLockTime(CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
 		mixTx.addInput(this.ownProof.getLastTransactionOutput());
 		//just needs to be anything else than uint_max, so that nlocktime is really used
 		mixTx.getInput(0).setSequenceNumber(3);
@@ -553,6 +553,8 @@ public class Mixer {
 		//ListenableFuture<Transaction> future = broadcast.broadcast();
 		if(inputOrder != outputOrder) {
 			partnerProof.setFilePath(ownProof.getFilePath());
+			partnerProof.setProofChangeEventListeners(ownProof.getProofChangeEventListeners());
+			partnerProof.setProofConfidenceChangeEventListeners(ownProof.getProofConfidenceChangeEventListeners());
 			ownProof = partnerProof;
 		}
 		ownProof.addTransaction(rcvdTx, outputOrder, outSp);
@@ -590,6 +592,8 @@ public class Mixer {
 		w.commitTx(finishedTx);
 		if(inputOrder != outputOrder) {
 			partnerProof.setFilePath(ownProof.getFilePath());
+			partnerProof.setProofChangeEventListeners(ownProof.getProofChangeEventListeners());
+			partnerProof.setProofConfidenceChangeEventListeners(ownProof.getProofConfidenceChangeEventListeners());
 			ownProof = partnerProof;
 		}
 		ownProof.addTransaction(finishedTx, outputOrder, outSp);

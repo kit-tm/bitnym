@@ -19,9 +19,9 @@ public class BroadcastAnnouncement {
 	private transient int mixValue;
 	private int acceptableLossValue;
 	
-	public BroadcastAnnouncement(String oa, int mV, int aLV) {
+	public BroadcastAnnouncement(String oa, long l, int aLV) {
 		this.onionAddress = oa;
-		this.mixValue = mV;
+		this.mixValue =  (int) l;
 		this.acceptableLossValue = aLV;
 	}
 

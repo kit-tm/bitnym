@@ -153,7 +153,7 @@ public class TransactionGenerator {
 		ECKey psnymKey = new ECKey();
 		long unixTime = System.currentTimeMillis() / 1000L;
 		//TODO use bitcoin nets median time
-		tx.setLockTime(CLTVScriptPair.currentBitcoinBIP113Time(bc));
+		tx.setLockTime(CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
 		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, CLTVScriptPair.currentBitcoinBIP113Time(bc)+lockTime);
 		w.importKey(psnymKey);
 		tx.addOutput(new TransactionOutput(params, tx, pm.getLastTransactionOutput().getValue().subtract(estimateBroadcastFee()), sp.getPubKeyScript().getProgram()));
