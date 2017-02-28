@@ -75,6 +75,7 @@ public class BitNymWallet {
 	private List<TimeChangedEventListener> timeChangedListeners;
 	private List<BroadcastAnnouncementChangeEventListener> baListeners;
 	private List<MixFinishedEventListener> mfListeners;
+	private ChallengeResponseVerifier crv;
 
 	//TODO refactoring: extend bitcoinj wallet and remove wallet field, pass this to functions which need wallet
 	
@@ -200,6 +201,8 @@ public class BitNymWallet {
 		tg = new TransactionGenerator(params, pg, wallet, bc);
 		
 		m = new Mixer(ptp, pm, wallet, params, pg, bc);
+		
+		crv = new ChallengeResponseVerifier(ptp, wallet, params, pg, bc);
 
 
 		//assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
@@ -324,25 +327,15 @@ public class BitNymWallet {
 	}
 	
 	public void mixWithRandomBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
-		try {
-			for(int i=0; i<50;i++) {
-				//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
-				//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
-				if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
-					TimeUnit.MINUTES.sleep(1);
-				} else {
-					m.setBroadcastAnnouncement(mpd.getRandomBroadcast());
-					assert(lockTime >= 0);
-					m.setLockTime(lockTime);
-					m.initiateMix();
-					//TODO remove this
-					TimeUnit.MINUTES.sleep(10);
-					break;
-				}
-			}
-
-		} catch (InterruptedException e) {
-			e.printStackTrace();
+		//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+		//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
+		if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
+			return;
+		} else {
+			m.setBroadcastAnnouncement(mpd.getRandomBroadcast());
+			assert(lockTime >= 0);
+			m.setLockTime(lockTime);
+			m.initiateMix();
 		}		
 	}
 	
@@ -475,6 +468,25 @@ public class BitNymWallet {
 
 	public String getBroadcastAnnouncementsString() {
 		return this.mpd.getBroadcastAnnouncements().toString();
+	}
+
+
+
+	public void listenForVerification() {
+		crv.listenForProofToVerify();
+	}
+
+
+
+	public void sendForVerification(String onionAddress) {
+		crv.setMixPartnerAdress(onionAddress);
+		crv.proveToVerifier(pm, wallet.findKeyFromPubHash(pm.getScriptPair().getPubKeyHash()));
+	}
+
+
+
+	public String getCurrentOnionAddress() {
+		return ptp.getIdentifier().getTorAddress();
 	}
 
 }

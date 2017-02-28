@@ -10,6 +10,7 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -170,6 +171,18 @@ public class ProofMessage implements Serializable {
 		
 		return true;
 	}
+	
+	//check that pub key corresponds to the key
+	//of the p2sh-output
+	public boolean isPubKeyCorrect(NetworkParameters params) {
+		byte[] pubkeyHashFromP2SHOutput;
+		if(!Arrays.equals(Sha256Hash.hash(sp.getRedeemScript().getProgram()),getLastTransactionOutput().getAddressFromP2SH(params).getHash160())) {
+			System.out.println("received redeemscript doesn't match the redeemscript hash of the transaction output, abort");
+			return false;
+		}
+		pubkeyHashFromP2SHOutput = sp.getRedeemScript().getPubKeyHash();
+		return Arrays.equals(Sha256Hash.hash(sp.getPubKey()), pubkeyHashFromP2SHOutput);
+	}
 
 	//important: my still be utxo, the locking is just a sufficient condition, not necessary
 	//for clients with have the utxo set (eg. full node clients)
@@ -286,8 +299,24 @@ public class ProofMessage implements Serializable {
 	}
 
 	public boolean isValidProof(BlockChain bc, PeerGroup pg, NetworkParameters params) {
-		return isValidPath() && isValidGPTx() &&
-				isNymNotSpend(bc) && isNymTxInBlockChain(params, bc, pg);
+		if(!isValidPath()) {
+			System.out.println("path is not valid, thus proof not valid, abort");
+			return false;
+		}
+		if(!isValidGPTx()) {
+			System.out.println("gptx is not valid, abort");
+			return false;
+		}
+		if(!isNymNotSpend(bc)) {
+			System.out.println("nym is not locked anymore, consider spent, abort");
+			return false;
+		}
+		if(!isNymTxInBlockChain(params, bc, pg)) {
+			System.out.println("nymtx is not in blockchain, consider proof invalid, abort");
+			return false;
+		}
+		System.out.println("proof seems valid");
+		return true;
 	}
 	
 	//when we want to create a mixtx, the outputs are not locked, so we do not know for sure whether the outputs are utxo

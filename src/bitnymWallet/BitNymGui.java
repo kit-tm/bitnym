@@ -78,6 +78,7 @@ public class BitNymGui extends JFrame {
 				// TODO Auto-generated method stub
 				JOptionPane.showMessageDialog(null, "Mixing erfolgreich, Aufnahme in die Blockchain" +
 						"steht aus", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
+				pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());
 				
 			}
 		});
@@ -89,7 +90,7 @@ public class BitNymGui extends JFrame {
 						" aufgenommen", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
 				//might happen that we receive to times 
 //				if() {
-					pcontroller.getView().getDisplay().setText((wallet.getProofMessageString()));
+					pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());
 //				}
 			}
 		});

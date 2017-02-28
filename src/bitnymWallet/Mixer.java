@@ -200,11 +200,6 @@ public class Mixer {
 						
 					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
-					try {
-						TimeUnit.MINUTES.sleep(2);
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
 				}
 
 			}
@@ -212,13 +207,6 @@ public class Mixer {
 
 		});
 		this.ptp.sendMessage(serialize(ownProof), mixPartnerAdress);
-		try {
-			TimeUnit.MINUTES.sleep(2);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-				
-		
 	}
 	
 	private boolean checkTxInputIsFromProof(Transaction rcvdTx, int i) {
@@ -279,12 +267,6 @@ public class Mixer {
 			}
 		});
 		this.ptp.sendMessage(serializedProof, mixPartnerAdress);
-		try {
-			TimeUnit.MINUTES.sleep(2);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		
 	}
 
 	private void challengeResponse() {
@@ -445,14 +427,6 @@ public class Mixer {
 
 			});
 			this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
-			try {
-				TimeUnit.MINUTES.sleep(2);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-
-
-
 		} else {
 			//let the mixpartner add his output first and partners input
 			//we will add then our output and sign the tx, send it to the partner
@@ -487,20 +461,9 @@ public class Mixer {
 						}
 					});
 					ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
-					try {
-						TimeUnit.MINUTES.sleep(2);
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-
 				}
 			});
 			this.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
-			try {
-				TimeUnit.MINUTES.sleep(2);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 	
@@ -643,6 +606,7 @@ public class Mixer {
 	
 	public void setBroadcastAnnouncement(BroadcastAnnouncement bca) {
 		this.bca = bca;
+		this.mixPartnerAdress = new Identifier(bca.getOnionAdress() + ".onion");
 	}
 
 

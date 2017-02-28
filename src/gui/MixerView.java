@@ -41,6 +41,15 @@ public class MixerView extends JPanel {
 
 
 	private JTextField lockTimeField;
+
+
+	private JButton listenForVerificationBtn;
+
+
+	private JButton sendForVerificationBtn;
+
+
+	private JTextField ourOnionAddress;
 	
 	public MixerView() {
 		super();
@@ -99,6 +108,12 @@ public class MixerView extends JPanel {
 		gbc.gridy = 4;
 		this.add(currentBip113Time, gbc);
 		
+		ourOnionAddress = new JTextField();
+		ourOnionAddress.setEditable(false);
+		gbc.gridx = 0;
+		gbc.gridy = 5;
+		this.add(ourOnionAddress, gbc);
+		
 		deleteProofBtn = new JButton("Delete Proof Message");
 		deleteProofBtn.setPreferredSize(new Dimension(220,30));
 		gbc.gridx = 3;
@@ -116,6 +131,18 @@ public class MixerView extends JPanel {
 		gbc.gridx = 3;
 		gbc.gridy = 6;
 		this.add(generateBroadcastBtn, gbc);
+		
+		listenForVerificationBtn = new JButton("Listen for Verification");
+		listenForVerificationBtn.setPreferredSize(new Dimension(220,30));
+		gbc.gridx = 3;
+		gbc.gridy = 7;
+		this.add(listenForVerificationBtn, gbc);
+		
+		sendForVerificationBtn = new JButton("Send for Verification");
+		sendForVerificationBtn.setPreferredSize(new Dimension(220,30));
+		gbc.gridx = 3;
+		gbc.gridy = 8;
+		this.add(sendForVerificationBtn, gbc);
 		
 		lockTimeField = new JTextField();
 		lockTimeField.setText("0");
@@ -173,5 +200,17 @@ public class MixerView extends JPanel {
 	
 	public JButton getGenerateBroadcastBtn() {
 		return this.generateBroadcastBtn;
+	}
+	
+	public JButton getListenForVerificationBtn() {
+		return this.listenForVerificationBtn;
+	}
+	
+	public JButton getSendForVerificationBtn() {
+		return this.sendForVerificationBtn;
+	}
+	
+	public JTextField getOurOnionAddress() {
+		return this.ourOnionAddress;
 	}
 }

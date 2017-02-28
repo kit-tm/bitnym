@@ -42,7 +42,8 @@ public class CLTVScriptPair implements Serializable {
 	private static final int LOCKTIME_TRESHOLD = 500000000;
 	private Script pubKeyScript;
 	private Script redeemScript;
-	private byte[] pubkeyHash; //to get the key by pubkeyhash
+	private byte[] pubkeyHash;
+	private byte[] pubkey;
 	
 	CLTVScriptPair(Script a, Script b) {
 		this.pubKeyScript = a;
@@ -76,6 +77,7 @@ public class CLTVScriptPair implements Serializable {
 		
 		this.pubKeyScript = ScriptBuilder.createP2SHOutputScript(redeemScript);
 		this.pubkeyHash = newPsynymKey.getPubKeyHash();
+		this.pubkey = newPsynymKey.getPubKey();
 	}
 	
 	//TODO encode sign in most-significant bit
@@ -122,13 +124,15 @@ public class CLTVScriptPair implements Serializable {
 		oos.writeObject(redeemScript.getProgram());
 		oos.writeObject(pubKeyScript.getProgram());
 		oos.writeObject(pubkeyHash);
+		oos.writeObject(pubkey);
 	}
 	
 	private void readObject(ObjectInputStream ois)
 			throws ClassNotFoundException, IOException {
 		this.redeemScript = new Script((byte[]) ois.readObject());
 		this.pubKeyScript = new Script((byte[]) ois.readObject());
-		this.pubkeyHash = (byte[]) ois.readObject();		
+		this.pubkeyHash = (byte[]) ois.readObject();	
+		this.pubkey = (byte[]) ois.readObject();
 	}
 	
 	//our sigScript of an p2sh-Output needs to append the signature first, than the redeem script
@@ -164,15 +168,17 @@ public class CLTVScriptPair implements Serializable {
 	//check that the redeem script is the one we defined, not some other
 	//TODO implement
 	public boolean isRedeemScriptRightFormat() {
-		return false;
+		return true;
 	}
 
 	//check and compare whether the lock time is still bigger than bip113 bitcoin time
 	public boolean isLocked(BlockChain bc) {
 		long challengeLockTime = getLockTime();
+		System.out.println("challenge lock time is " + new Date(challengeLockTime*1000));
 		return challengeLockTime > currentBitcoinBIP113Time(bc);
 	}
 
+	//returns current times as unix time 1.1.1970
 	public static long currentBitcoinBIP113Time(BlockChain bc) {
 		StoredBlock headBlock = bc.getChainHead();
 		StoredBlock iteratingBlock = headBlock;
@@ -192,6 +198,10 @@ public class CLTVScriptPair implements Serializable {
 	public long getLockTime() {
 		byte[] program = redeemScript.getProgram();
 		return ((long) program[1]) + ((long) program[2]) << 8 + ((long) program[3]) << 16 + ((long) program[4]) << 24;
+	}
+
+	public byte[] getPubKey() {
+		return this.pubkey;
 	}
 	
 }

@@ -57,6 +57,8 @@ public class MixerController {
 		
 		mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
 		
+		mixerView.getOurOnionAddress().setText(wallet.getCurrentOnionAddress());
+		
 		mixerView.getDeleteProofBtn().addActionListener(new ActionListener() {
 			
 			@Override
@@ -89,6 +91,22 @@ public class MixerController {
 				wallet.sendBroadcastAnnouncement(Integer.parseInt(mixerView.getLockTimeField().getText())*60);
 				mixerView.getCurrentNymValue().setText(wallet.getPsynymValue());
 				mixerView.getCurrentWalletValue().setText(wallet.getWallet().getBalance().toFriendlyString());
+			}
+		});
+		
+		mixerView.getListenForVerificationBtn().addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				wallet.listenForVerification();				
+			}
+		});
+		
+		mixerView.getSendForVerificationBtn().addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				wallet.sendForVerification(mixerView.getOnionString());
 			}
 		});
 	}
