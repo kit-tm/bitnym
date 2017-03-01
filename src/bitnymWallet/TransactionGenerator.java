@@ -32,7 +32,7 @@ public class TransactionGenerator {
 
 	//TODO move constants to utility class
 	public static Coin PROOF_OF_BURN = Coin.valueOf(50000);
-	public static Coin PSNYMVALUE = Coin.valueOf(200000);
+	public static Coin PSNYMVALUE = Coin.valueOf(1000000);
 
 	private NetworkParameters params;
 

@@ -63,6 +63,7 @@ public class CLTVScriptPair implements Serializable {
 		
 		//the part that freezes the tx output, special 5 byte number
 		sb.data(encodeExpireDate(expireDate));
+		//sb.smallNum(num)
 		sb.op(ScriptOpCodes.OP_CHECKLOCKTIMEVERIFY);
 		sb.op(ScriptOpCodes.OP_DROP);
 		
@@ -74,13 +75,16 @@ public class CLTVScriptPair implements Serializable {
 		sb.op(ScriptOpCodes.OP_CHECKSIG);
 		
 		this.redeemScript = sb.build();
+		System.out.println("cltvscripiar yielded a locktime of " + new Date(getLockTime()*1000));
+		assert(expireDate == getLockTime());
+
 		
 		this.pubKeyScript = ScriptBuilder.createP2SHOutputScript(redeemScript);
 		this.pubkeyHash = newPsynymKey.getPubKeyHash();
 		this.pubkey = newPsynymKey.getPubKey();
 	}
 	
-	//TODO encode sign in most-significant bit
+	//TODO encode sign in most-significant bitencodeExpireDate
 	//checklocktimeverify has a special format, encode this into a bytearray to add to the script
 	private static byte[] encodeExpireDate(long expireDate) {
 		int numOfBits = CLTVScriptPair.log(expireDate, 2);
@@ -192,12 +196,20 @@ public class CLTVScriptPair implements Serializable {
 			}
 		}
 		Arrays.sort(blockTimeStamps);
+		System.out.println("current bitcoinbip113time yielded " + new Date(blockTimeStamps[5]*1000));
 		return blockTimeStamps[5];
 	}
 
 	public long getLockTime() {
 		byte[] program = redeemScript.getProgram();
-		return ((long) program[1]) + ((long) program[2]) << 8 + ((long) program[3]) << 16 + ((long) program[4]) << 24;
+		System.out.println(redeemScript.toString());
+		long[] time = new long[4];
+		time[0] = program[1] & 0xFF;
+		time[1] = program[2] & 0xFF;
+		time[2] = program[3] & 0xFf;
+		time[3] = program[4] & 0xFF;
+		//System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(time));		
+		return time[0] | (time[1] << 8L) | (time[2] << 16L) | (time[3] << 24L);
 	}
 
 	public byte[] getPubKey() {
