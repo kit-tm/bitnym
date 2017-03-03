@@ -29,6 +29,7 @@ import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionConfidence;
+import org.bitcoinj.core.Utils;
 import org.bitcoinj.core.TransactionConfidence.ConfidenceType;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionOutput;
@@ -36,6 +37,7 @@ import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
+import org.bouncycastle.jce.ECKeyUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -176,12 +178,14 @@ public class ProofMessage implements Serializable {
 	//of the p2sh-output
 	public boolean isPubKeyCorrect(NetworkParameters params) {
 		byte[] pubkeyHashFromP2SHOutput;
-		if(!Arrays.equals(Sha256Hash.hash(sp.getRedeemScript().getProgram()),getLastTransactionOutput().getAddressFromP2SH(params).getHash160())) {
+		if(!ScriptBuilder.createP2SHOutputScript(sp.getRedeemScript()).equals(getLastTransactionOutput().getScriptPubKey())) {
 			System.out.println("received redeemscript doesn't match the redeemscript hash of the transaction output, abort");
 			return false;
 		}
-		pubkeyHashFromP2SHOutput = sp.getRedeemScript().getPubKeyHash();
-		return Arrays.equals(Sha256Hash.hash(sp.getPubKey()), pubkeyHashFromP2SHOutput);
+		
+		int chunklength = sp.getRedeemScript().getChunks().size();
+		pubkeyHashFromP2SHOutput = sp.getRedeemScript().getChunks().get(chunklength-3).data;
+		return Arrays.equals(Utils.sha256hash160(sp.getPubKey()), pubkeyHashFromP2SHOutput);
 	}
 
 	//important: my still be utxo, the locking is just a sufficient condition, not necessary
