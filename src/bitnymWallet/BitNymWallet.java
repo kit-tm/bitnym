@@ -163,13 +163,13 @@ public class BitNymWallet {
 			}
 		});
 		insertIdentifierIntoFilter();
-		javax.swing.Timer t = new javax.swing.Timer( 1000, new ActionListener() {
-			@Override
-			  public void actionPerformed( ActionEvent e ) {
-				assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
-			  }
-			});
-		t.start();
+//		javax.swing.Timer t = new javax.swing.Timer( 1000, new ActionListener() {
+//			@Override
+//			  public void actionPerformed( ActionEvent e ) {
+//				assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
+//			  }
+//			});
+//		t.start();
 		System.out.println("bloom filter assertion");
 		//pg.getDownloadPeer().setBloomFilter(filter);
 		log.info("insert our broadcast transaction identifier string, into bloom filter of current download peer");

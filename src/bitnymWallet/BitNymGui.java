@@ -77,7 +77,7 @@ public class BitNymGui extends JFrame {
 			public void onMixFinished() {
 				// TODO Auto-generated method stub
 				JOptionPane.showMessageDialog(null, "Mixing erfolgreich, Aufnahme in die Blockchain" +
-						"steht aus", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
+						"steht aus", "Hinweis on mix finished", JOptionPane.INFORMATION_MESSAGE);
 				pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());
 				
 			}
@@ -87,7 +87,7 @@ public class BitNymGui extends JFrame {
 			@Override
 			public void onProofConfidenceChanged() {
 				JOptionPane.showMessageDialog(null, "Mixtransaktion wurde in die Blockchain" +
-						" aufgenommen", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
+						" aufgenommen", "Hinweis confidenceChange", JOptionPane.INFORMATION_MESSAGE);
 				//might happen that we receive to times 
 //				if() {
 					pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());

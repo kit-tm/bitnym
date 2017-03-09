@@ -47,6 +47,7 @@ public class Mixer {
 	private BlockChain bc;
 	private List<MixFinishedEventListener> mfListeners;
 	private int lockTime;
+	private boolean successful;
 	
 	//get the onion mix adress from a broadcastannouncement
 	public Mixer(PTP ptp, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
@@ -103,6 +104,7 @@ public class Mixer {
 	              break;
 	            default:
 	            	System.out.println("Send successful");
+	            	successful = true;
 	              break;
 	          }
 	        }
@@ -166,12 +168,6 @@ public class Mixer {
 						}
 					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
-					try {
-						TimeUnit.MINUTES.sleep(2);
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-					
 
 				} else if(outputOrder == 1) {
 					System.out.println("partner added first output to the tx");
@@ -187,19 +183,28 @@ public class Mixer {
 						
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
-							if(!checkTx(rcvdTx, deserializeTransaction(arg0))) {
-								System.out.println("checktx failed");
-								//return;
-							}
-							commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
-							ptp.exit();
-							//don't reuse hidden service, to not link pseudonyms
-							ptp.deleteHiddenService();
+							ptp.setReceiveListener(new ReceiveListener() {
+								
+								@Override
+								public void messageReceived(byte[] arg0, Identifier arg1) {
+									// TODO Auto-generated method stub
+									if(!checkTx(rcvdTx, deserializeTransaction(arg0))) {
+										System.out.println("checktx failed");
+										//return;
+									}
+									commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
+									ptp.exit();
+									//don't reuse hidden service, to not link pseudonyms
+									ptp.deleteHiddenService();
+								}
+							});
+
 						}
 
 						
 					});
 					ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
+
 				}
 
 			}
@@ -218,6 +223,8 @@ public class Mixer {
 	
 	public void initiateMix() {
 		
+		System.out.println("is ptp initialized? " + ptp.isInitialized());
+				
 		ptp.setSendListener(new SendListener() {
 
 	        @Override
@@ -231,6 +238,7 @@ public class Mixer {
 	              break;
 	            default:
 	            	System.out.println("Send successful");
+	            	successful = true;
 	              break;
 	          }
 	        }
@@ -250,6 +258,7 @@ public class Mixer {
 		serializedProof = serialize(this.ownProof);
 		
 		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
+		ping();
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			//deserialize proof
@@ -268,6 +277,23 @@ public class Mixer {
 		});
 		this.ptp.sendMessage(serializedProof, mixPartnerAdress);
 	}
+
+	private void ping() {
+		byte[] data = {1};
+		successful = false;
+		for(int i=1; i<12 && successful == false; i++) {
+			long timeout = i*10*1000;
+			//timeout is in 
+			this.ptp.sendMessage(data, this.mixPartnerAdress, timeout);
+			try {
+				TimeUnit.MILLISECONDS.sleep(timeout+3000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+
 
 	private void challengeResponse() {
 		//challenge-response to proof ownership of key,? necessary? mix prooves ownership anyway ...
@@ -317,10 +343,17 @@ public class Mixer {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
-				mixPartnerAdress = arg1;
-				passiveMix(arg0);
+				ptp.setReceiveListener(new ReceiveListener() {
+					
+					@Override
+					public void messageReceived(byte[] arg0, Identifier arg1) {
+						mixPartnerAdress = arg1;
+						passiveMix(arg0);
+					}
+				});
 			}
 		});
+
 	}
 	
 	public void closeListeningForMix() {
@@ -337,22 +370,27 @@ public class Mixer {
 	//right output coin value etc.
 	private boolean checkTx(Transaction mixTx, Transaction rcvdTxToCheck) {
 		if(rcvdTxToCheck.getInputs().size() > 2 || rcvdTxToCheck.getOutputs().size() > 2) {
+			System.out.println("checktx failed, num of txinputs is " + rcvdTxToCheck.getInputs().size() +
+					" num of outputs is " + rcvdTxToCheck.getOutputs().size());
 			return false;
 		}
 		
 		if(rcvdTxToCheck.getOutputs().size() == 2) {
 			if(!rcvdTxToCheck.getOutput(0).getValue().equals(rcvdTxToCheck.getOutput(1).getValue())) {
+				System.out.println("value of outputs is different, checktx fails ");
 				return false;
 			}
 		}
 		
 		for(int i=0; i < mixTx.getInputs().size(); i++) {
 			if(!mixTx.getInput(i).getOutpoint().equals(rcvdTxToCheck.getInput(i).getOutpoint())) {
+				System.out.println("the outpoints do not match, checktx fails");
 				return false;
 			}
 		}
 		for(int i=0; i < mixTx.getOutputs().size(); i++) {
 			if(!mixTx.getOutput(i).equals(rcvdTxToCheck.getOutput(i))) {
+				System.out.println("outputs are sth else, checktx fails");
 				return false;
 			}
 		}		
@@ -451,13 +489,21 @@ public class Mixer {
 
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
-							if(!checkTx(penFinalTx, deserializeTransaction(arg0))) {
-								System.out.println("checktx failed");
-							}
-							commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
-							ptp.exit();
-							//don't reuse hidden service, to not link pseudonyms
-							ptp.deleteHiddenService();
+							ptp.setReceiveListener(new ReceiveListener() {
+								
+								@Override
+								public void messageReceived(byte[] arg0, Identifier arg1) {
+									// TODO Auto-generated method stub
+									if(!checkTx(penFinalTx, deserializeTransaction(arg0))) {
+										System.out.println("checktx failed");
+									}
+									commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
+									ptp.exit();
+									//don't reuse hidden service, to not link pseudonyms
+									ptp.deleteHiddenService();
+								}
+							});
+
 						}
 					});
 					ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
@@ -502,12 +548,17 @@ public class Mixer {
 		rcvdTx.verify();
 		w.commitTx(rcvdTx);
 		System.out.println(rcvdTx);
+		ping();
 		ptp.setSendListener(new SendListener() {
 			
 			@Override
 			public void messageSent(long arg0, Identifier arg1, State arg2) {
 				ptp.exit();
-				ptp.deleteHiddenService();				
+				ptp.deleteHiddenService();
+				for(MixFinishedEventListener l : mfListeners) {
+					assert(mfListeners.size() <= 1);
+					l.onMixFinished();
+				}				
 			}
 		});
 		ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
@@ -541,9 +592,7 @@ public class Mixer {
 				}
 			}
 		});
-		for(MixFinishedEventListener l : mfListeners) {
-			l.onMixFinished();
-		}
+
 	}
 	
 	private void commitRcvdFinalTx(
