@@ -144,6 +144,7 @@ public class CLTVScriptPair implements Serializable {
 		assert(inOffset >= 0);
 		//get key by pubkeyhash from wallet
 		ECKey key = w.findKeyFromPubHash(this.pubkeyHash);
+		assert(key != null);
 		TransactionSignature ts = tx.calculateSignature(inOffset, key, redeemScript, SigHash.ALL, false);
 		ScriptBuilder sb = new ScriptBuilder();
 		byte[] sigEncoded = ts.encodeToBitcoin();

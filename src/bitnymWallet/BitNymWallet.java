@@ -3,8 +3,10 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -89,11 +91,13 @@ public class BitNymWallet {
 		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
 
 
+		//ptp = new PTP(System.getProperty("user.dir"), 9051, 9050);
 		ptp = new PTP(System.getProperty("user.dir"));
 		try {
 			//TODO move ptp to mixer
 			log.info("initiate ptp and create hidden service");
 			ptp.init();
+			System.out.println("executed ptp init");
 			ptp.createHiddenService();
 			System.out.println(ptp.getIdentifier().getTorAddress());
 		} catch (IOException e3) {
@@ -136,9 +140,17 @@ public class BitNymWallet {
 		log.info("this is the current proof chain");
 		pm = new ProofMessage();
 		log.info(pm.toString());
+//		try {
+//			PrintWriter out = new PrintWriter("prooftextfile2.txt");
+//			out.println(pm.toString());
+//			out.close();
+//		} catch (FileNotFoundException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
-		System.setProperty("socksProxyHost", "127.0.0.1");
-		System.setProperty("socksProxyPort", "9050");
+		//System.setProperty("socksProxyHost", "127.0.0.1");
+		//System.setProperty("socksProxyPort", "9050");
 		pg = new PeerGroup(params, bc, new BlockingClientManager());
 		pg.addWallet(wallet);
 
@@ -292,7 +304,8 @@ public class BitNymWallet {
 	public void sendBroadcastAnnouncement(int lockTime) {
 		try {
 			System.out.println("sendBroadcastAnnouncement");
-			if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+			//if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+			if(pm.isEmpty()) { //|| !pm.getLastTransaction().getConfidence().getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 				return;
 			} else {
 				tg.sendBroadcastAnnouncement(new BroadcastAnnouncement(ptp.getIdentifier().getTorAddress(), pm.getLastTransactionOutput().getValue().getValue(), 10), walletFile, pm, lockTime);
@@ -316,7 +329,7 @@ public class BitNymWallet {
 					m.setLockTime(lockTime);
 					m.initiateMix();
 					//TODO remove this
-					TimeUnit.MINUTES.sleep(10);
+					//TimeUnit.MINUTES.sleep(10);
 					break;
 				}
 			}

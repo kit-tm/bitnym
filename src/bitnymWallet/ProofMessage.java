@@ -367,6 +367,7 @@ public class ProofMessage implements Serializable {
 	//TODO throw exception instead of -1, or assertion that caller assure that a tx exists?
 	public int getLastOutputIndex() {
 		if (validationPath.size() > 0) {
+			assert(outputIndices.get(outputIndices.size()-1).intValue() <= 2);
 			return outputIndices.get(outputIndices.size()-1).intValue();
 		} else {
 			return -1;

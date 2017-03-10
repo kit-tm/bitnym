@@ -183,22 +183,16 @@ public class Mixer {
 						
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
-							ptp.setReceiveListener(new ReceiveListener() {
-								
-								@Override
-								public void messageReceived(byte[] arg0, Identifier arg1) {
 									// TODO Auto-generated method stub
 									if(!checkTx(rcvdTx, deserializeTransaction(arg0))) {
 										System.out.println("checktx failed");
 										//return;
 									}
 									commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
+									System.out.println("commited tx, exit ptp and delete hidden service");
 									ptp.exit();
 									//don't reuse hidden service, to not link pseudonyms
 									ptp.deleteHiddenService();
-								}
-							});
-
 						}
 
 						
@@ -229,6 +223,7 @@ public class Mixer {
 
 	        @Override
 	        public void messageSent(long id, Identifier destination, State state) {
+	        	System.out.println("call sendlistener of initiatemix");
 	          switch (state) {
 	            case INVALID_DESTINATION:
 	              System.out.println("Destination " + destination + " is invalid");
@@ -258,7 +253,7 @@ public class Mixer {
 		serializedProof = serialize(this.ownProof);
 		
 		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
-		ping();
+		//ping();
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			//deserialize proof
@@ -268,7 +263,7 @@ public class Mixer {
 				//check proof
 				System.out.println("check partner proof");
 				if(!partnerProof.isProbablyValid(params, bc, pg)) {
-					System.out.println("proof of mix partner is invalid");
+					System.out.println("proof of mix partner is invalid, abort");
 					return;
 				}
 				challengeResponse();
@@ -276,21 +271,27 @@ public class Mixer {
 			}
 		});
 		this.ptp.sendMessage(serializedProof, mixPartnerAdress);
+//		try {
+//			TimeUnit.SECONDS.sleep(30);
+//		} catch (InterruptedException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 	}
 
 	private void ping() {
 		byte[] data = {1};
 		successful = false;
-		for(int i=1; i<12 && successful == false; i++) {
-			long timeout = i*10*1000;
+		for(int i=1; i<2 && successful == false; i++) {
+			long timeout = i*180*1000;
 			//timeout is in 
 			this.ptp.sendMessage(data, this.mixPartnerAdress, timeout);
-			try {
-				TimeUnit.MILLISECONDS.sleep(timeout+3000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+//			try {
+//				TimeUnit.MILLISECONDS.sleep(timeout+i*3000);
+//			} catch (InterruptedException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
 		}
 	}
 
@@ -343,14 +344,8 @@ public class Mixer {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
-				ptp.setReceiveListener(new ReceiveListener() {
-					
-					@Override
-					public void messageReceived(byte[] arg0, Identifier arg1) {
 						mixPartnerAdress = arg1;
 						passiveMix(arg0);
-					}
-				});
 			}
 		});
 
@@ -372,7 +367,7 @@ public class Mixer {
 		if(rcvdTxToCheck.getInputs().size() > 2 || rcvdTxToCheck.getOutputs().size() > 2) {
 			System.out.println("checktx failed, num of txinputs is " + rcvdTxToCheck.getInputs().size() +
 					" num of outputs is " + rcvdTxToCheck.getOutputs().size());
-			return false;
+			return false;			
 		}
 		
 		if(rcvdTxToCheck.getOutputs().size() == 2) {
@@ -391,6 +386,10 @@ public class Mixer {
 		for(int i=0; i < mixTx.getOutputs().size(); i++) {
 			if(!mixTx.getOutput(i).equals(rcvdTxToCheck.getOutput(i))) {
 				System.out.println("outputs are sth else, checktx fails");
+				System.out.println("mixTx ----------");
+				System.out.println(mixTx.toString());
+				System.out.println("rcvdtxtocheck--------");
+				System.out.println(rcvdTxToCheck.toString());
 				return false;
 			}
 		}		
@@ -489,10 +488,6 @@ public class Mixer {
 
 						@Override
 						public void messageReceived(byte[] arg0, Identifier arg1) {
-							ptp.setReceiveListener(new ReceiveListener() {
-								
-								@Override
-								public void messageReceived(byte[] arg0, Identifier arg1) {
 									// TODO Auto-generated method stub
 									if(!checkTx(penFinalTx, deserializeTransaction(arg0))) {
 										System.out.println("checktx failed");
@@ -501,9 +496,6 @@ public class Mixer {
 									ptp.exit();
 									//don't reuse hidden service, to not link pseudonyms
 									ptp.deleteHiddenService();
-								}
-							});
-
 						}
 					});
 					ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
@@ -545,16 +537,30 @@ public class Mixer {
 			final CLTVScriptPair outSp,
 			final Transaction rcvdTx,
 			int inputOrder) {
+		System.out.println("call to broacastmixtx");
 		rcvdTx.verify();
 		w.commitTx(rcvdTx);
 		System.out.println(rcvdTx);
-		ping();
+		//ping();
 		ptp.setSendListener(new SendListener() {
 			
 			@Override
 			public void messageSent(long arg0, Identifier arg1, State arg2) {
-				ptp.exit();
-				ptp.deleteHiddenService();
+				System.out.println("exit ptp, message sent is called");
+				//ptp.exit();
+				//ptp.deleteHiddenService();
+//				try {
+//					ptp.init();
+//				} catch (IOException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+				try {
+					ptp.createHiddenService();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 				for(MixFinishedEventListener l : mfListeners) {
 					assert(mfListeners.size() <= 1);
 					l.onMixFinished();
@@ -597,9 +603,11 @@ public class Mixer {
 	
 	private void commitRcvdFinalTx(
 			final CLTVScriptPair outSp, byte[] arg0, int inputOrder, int outputOrder) {
+		System.out.println("call commitrcvdfinaltx");
 		System.out.println("deserialize finished transaction");
 		final Transaction finishedTx = deserializeTransaction(arg0);
 		finishedTx.verify();
+		System.out.println("print finishedtx");
 		System.out.println(finishedTx);
 		w.commitTx(finishedTx);
 		if(inputOrder != outputOrder) {

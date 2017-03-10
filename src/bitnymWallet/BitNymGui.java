@@ -79,6 +79,7 @@ public class BitNymGui extends JFrame {
 				JOptionPane.showMessageDialog(null, "Mixing erfolgreich, Aufnahme in die Blockchain" +
 						"steht aus", "Hinweis on mix finished", JOptionPane.INFORMATION_MESSAGE);
 				pcontroller.getView().getDisplay().setText(wallet.getProofMessageString());
+				mcontroller.getView().getOurOnionAddress().setText(wallet.getCurrentOnionAddress());
 				
 			}
 		});
