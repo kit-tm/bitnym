@@ -4,14 +4,12 @@ import gui.ConsoleController;
 import gui.MixerController;
 import gui.ProofController;
 
-import javax.swing.JFrame;
-import javax.swing.JOptionPane;
-import javax.swing.JTabbedPane;
 import java.awt.BorderLayout;
 import java.util.List;
 
-import javax.swing.JPanel;
-import javax.swing.JTextField;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import javax.swing.JTabbedPane;
 
 import org.bitcoinj.core.Transaction;
 

@@ -9,9 +9,7 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
-import org.bitcoinj.core.Address;
 import org.bitcoinj.core.BitcoinSerializer;
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
@@ -29,7 +27,6 @@ import edu.kit.tm.ptp.Identifier;
 import edu.kit.tm.ptp.PTP;
 import edu.kit.tm.ptp.ReceiveListener;
 import edu.kit.tm.ptp.SendListener;
-import edu.kit.tm.ptp.SendListener.State;
 
 
 //TODO check which broadcastannouncement read and accepted for mixing, and check whether we want to mix this nym or not
@@ -117,6 +114,7 @@ public class Mixer {
 			return;
 		}
 		//send own proof to partner
+		System.out.println("listen for first part of mix transaction");
 		this.ptp.setReceiveListener(new ReceiveListener() {
 
 			@Override
@@ -150,6 +148,7 @@ public class Mixer {
 				if(outputOrder == 0) {
 					//add our output first
 					System.out.println("partner didn't add first output, we'll add the first output and sign later");
+					System.out.println("listen for complete mix transaction, we started");
 					ptp.setReceiveListener(new ReceiveListener() {
 						
 						@Override
@@ -179,6 +178,7 @@ public class Mixer {
 					rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					
 					//rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
+					System.out.println("listen for complete mix transaction. other started");
 					ptp.setReceiveListener(new ReceiveListener() {
 						
 						@Override
@@ -190,9 +190,15 @@ public class Mixer {
 									}
 									commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
 									System.out.println("commited tx, exit ptp and delete hidden service");
-									ptp.exit();
+									//ptp.exit();
 									//don't reuse hidden service, to not link pseudonyms
 									ptp.deleteHiddenService();
+									try {
+										//ptp.init();
+										ptp.createHiddenService();
+									} catch (IOException e) {
+										e.printStackTrace();
+									}
 						}
 
 						
@@ -254,6 +260,7 @@ public class Mixer {
 		
 		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
 		//ping();
+		System.out.println("listen for proof (first message of mix(?))");
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			//deserialize proof
@@ -340,6 +347,7 @@ public class Mixer {
 	
 	public void listenForMix() {
 		System.out.println("listenformix");
+		System.out.println("listen for mix to start passive mixing with");
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
@@ -352,6 +360,7 @@ public class Mixer {
 	}
 	
 	public void closeListeningForMix() {
+		System.out.println("listen for nothing, ignoring messages (when closing listening for mix)");
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
@@ -435,6 +444,7 @@ public class Mixer {
 			serializedTx = mixTx.bitcoinSerialize();
 
 			//check tx, sign it, then send it out to the bitcoin network
+			System.out.println("listen for transaction to sign while mixing, we started");
 			this.ptp.setReceiveListener(new ReceiveListener() {
 
 				@Override
@@ -469,6 +479,7 @@ public class Mixer {
 			//we will add then our output and sign the tx, send it to the partner
 			//and let the partner sign the tx
 			serializedTx = mixTx.bitcoinSerialize();
+			System.out.println("listen for transaction of partner to add ours to, he starts");
 			this.ptp.setReceiveListener(new ReceiveListener() {
 
 				@Override
@@ -484,6 +495,7 @@ public class Mixer {
 					penFinalTx.addOutput(newPsyNym);
 					penFinalTx.getInput(0).setScriptSig(inSp.calculateSigScript(penFinalTx, 0, w));
 					penFinalTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+					System.out.println("listen for complete mix transaction");
 					ptp.setReceiveListener(new ReceiveListener() {
 
 						@Override
@@ -493,9 +505,15 @@ public class Mixer {
 										System.out.println("checktx failed");
 									}
 									commitRcvdFinalTx(outSp, arg0, 0, outputOrder);	
-									ptp.exit();
+									//ptp.exit();
 									//don't reuse hidden service, to not link pseudonyms
 									ptp.deleteHiddenService();
+									try {
+										//ptp.init();
+										ptp.createHiddenService();
+									} catch (IOException e) {
+										e.printStackTrace();
+									}
 						}
 					});
 					ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
@@ -548,7 +566,7 @@ public class Mixer {
 			public void messageSent(long arg0, Identifier arg1, State arg2) {
 				System.out.println("exit ptp, message sent is called");
 				//ptp.exit();
-				//ptp.deleteHiddenService();
+				ptp.deleteHiddenService();
 //				try {
 //					ptp.init();
 //				} catch (IOException e) {

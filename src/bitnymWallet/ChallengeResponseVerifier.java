@@ -42,7 +42,7 @@ public class ChallengeResponseVerifier {
 	
 	
 	public void listenForProofToVerify() {
-		System.out.println("listen for verification");
+		System.out.println("listen for proof to verify");
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
@@ -67,6 +67,7 @@ public class ChallengeResponseVerifier {
 		System.out.println("draw a challenge string at random");
 		final byte[] challengeString = drawChallengeNumber(20);
 		System.out.println("drew random string " + javax.xml.bind.DatatypeConverter.printHexBinary(challengeString));
+		System.out.println("listen for signature of challenge");
 		this.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
@@ -130,6 +131,7 @@ public class ChallengeResponseVerifier {
 
 
 	public void proveToVerifier(ProofMessage message, final ECKey signingKey) {
+		System.out.println("Sending proof, listening for challenge");
 		ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
@@ -138,6 +140,7 @@ public class ChallengeResponseVerifier {
 				Sha256Hash hash = Sha256Hash.wrap(Sha256Hash.hash(challengeString));
 				ECDSASignature signature = sign(hash, signingKey);			
 				byte[] serializedSignature = signature.encodeToDER();
+				System.out.println("received and solved challenge, listening for confirmation");
 				ptp.setReceiveListener(new ReceiveListener() {
 					
 					@Override

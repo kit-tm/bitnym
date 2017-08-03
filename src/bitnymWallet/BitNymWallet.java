@@ -1,12 +1,8 @@
 package bitnymWallet;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -25,13 +21,12 @@ import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.TransactionConfidence.Listener;
-import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
+import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
 import org.bitcoinj.core.listeners.PeerConnectedEventListener;
 import org.bitcoinj.net.BlockingClientManager;
-import org.bitcoinj.net.discovery.DnsDiscovery;
+import org.bitcoinj.params.RegTestParams;
 import org.bitcoinj.params.TestNet3Params;
 import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.store.SPVBlockStore;
@@ -83,8 +78,9 @@ public class BitNymWallet {
 	
 	
 	public BitNymWallet() {
-		MainClass.params = TestNet3Params.get();
-		params = TestNet3Params.get();
+		//MainClass.params = TestNet3Params.get();
+		MainClass.params = RegTestParams.get();
+		params = MainClass.params;
 
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
@@ -92,7 +88,7 @@ public class BitNymWallet {
 
 
 		//ptp = new PTP(System.getProperty("user.dir"), 9051, 9050);
-		ptp = new PTP(System.getProperty("user.dir"));
+		ptp = new PTP();
 		try {
 			//TODO move ptp to mixer
 			log.info("initiate ptp and create hidden service");
@@ -155,7 +151,17 @@ public class BitNymWallet {
 		pg.addWallet(wallet);
 
 		//TODO DNS through Tor without Orchid, as it is not maintained
-		pg.addPeerDiscovery(new DnsDiscovery(params));
+		//pg.addPeerDiscovery(new DnsDiscovery(params));
+		try {
+			pg.addAddress(InetAddress.getByName("172.17.1.101"));
+			pg.addAddress(InetAddress.getByName("172.17.1.102"));
+			//pg.addAddress(InetAddress.getByName("172.17.1.103"));
+			pg.addAddress(InetAddress.getByName("172.17.1.104"));
+			//pg.addAddress(InetAddress.getByName("172.17.1.105"));
+		} catch (UnknownHostException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
 		System.out.println("download chain");
 		pg.start();
 		pg.downloadBlockChain();
@@ -187,14 +193,23 @@ public class BitNymWallet {
 		log.info("insert our broadcast transaction identifier string, into bloom filter of current download peer");
 		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 
+		System.out.println("Current receive address: " + wallet.currentReceiveAddress().toBase58());
 
 		log.info("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
 		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
-		System.out.println(wallet.currentReceiveAddress().toBase58());
 
 
 		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
-
+		
+		/*
+		// Send all coins back to faucet
+		Address targetAddress = new Address(params, "mwCwTceJvYV27KXBc3NJZys6CjsgsoeHmf");
+		try {
+			wallet.sendCoins(SendRequest.emptyWallet(targetAddress));
+		} catch (InsufficientMoneyException e) {
+			e.printStackTrace();
+		}
+		*/
 
 
 		try {
@@ -269,8 +284,11 @@ public class BitNymWallet {
 	
 	
 	public void exit() {
+		System.out.println("1");
 		ptp.exit();
+		System.out.println("2");
 		pg.stop();
+		System.out.println("3");
 	}
 	
 	
@@ -342,7 +360,11 @@ public class BitNymWallet {
 	public void mixWithRandomBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
 		//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
-		if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
+		if(pm.isEmpty()) {	
+			System.out.println("mixWithRandomBroadcast aborted: pm.isEmpty()");
+			return;
+		} else if(pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
+			System.out.println("mixWithRandomBroadcast aborted: getDepthInBlocks() == 0 of transaction " + pm.getLastTransaction().toString());
 			return;
 		} else {
 			m.setBroadcastAnnouncement(mpd.getRandomBroadcast());
