@@ -292,7 +292,7 @@ public class ProofMessage implements Serializable {
 		assert(block != null);
 		for(int i=0; i < bestchainheight-appearedInChainheight2; i++) {
 			try {
-				System.out.println("iteration: " + i);
+				//System.out.println("iteration: " + i);
 				assert(block != null);
 				block = block.getPrev(bc.getBlockStore());
 			} catch (BlockStoreException e) {

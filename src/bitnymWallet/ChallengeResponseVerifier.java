@@ -24,7 +24,7 @@ import edu.kit.tm.ptp.ReceiveListener;
 
 public class ChallengeResponseVerifier {
 	
-	private PTP ptp;
+	private BitNymWallet wallet;
 	private Identifier mixPartnerAdress;
 	private ProofMessage partnerProof;
 	private Wallet w;
@@ -32,8 +32,8 @@ public class ChallengeResponseVerifier {
 	private PeerGroup pg;
 	private BlockChain bc;
 
-	public ChallengeResponseVerifier(PTP ptp, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
-		this.ptp = ptp;
+	public ChallengeResponseVerifier(BitNymWallet wallet, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
+		this.wallet = wallet;
 		this.w = w;
 		this.params = params;
 		this.pg = pg;
@@ -43,7 +43,7 @@ public class ChallengeResponseVerifier {
 	
 	public void listenForProofToVerify() {
 		System.out.println("listen for proof to verify");
-		this.ptp.setReceiveListener(new ReceiveListener() {
+		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
@@ -68,7 +68,7 @@ public class ChallengeResponseVerifier {
 		final byte[] challengeString = drawChallengeNumber(20);
 		System.out.println("drew random string " + javax.xml.bind.DatatypeConverter.printHexBinary(challengeString));
 		System.out.println("listen for signature of challenge");
-		this.ptp.setReceiveListener(new ReceiveListener() {
+		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
@@ -78,15 +78,15 @@ public class ChallengeResponseVerifier {
 				if(!isSignatureCorrect(signature, challengeString)) {
 					System.out.println("signature is not correct");
 					notification[0] = 0;
-					ptp.sendMessage(notification, mixPartnerAdress);
+					wallet.ptp.sendMessage(notification, mixPartnerAdress);
 					return;
 				}
 				System.out.println("signature is correct");
 				notification[0] = 1;
-				ptp.sendMessage(notification, mixPartnerAdress);
+				wallet.ptp.sendMessage(notification, mixPartnerAdress);
 			}
 		});
-		ptp.sendMessage(challengeString, mixPartnerAdress);
+		wallet.ptp.sendMessage(challengeString, mixPartnerAdress);
 
 	}
 	
@@ -132,7 +132,7 @@ public class ChallengeResponseVerifier {
 
 	public void proveToVerifier(ProofMessage message, final ECKey signingKey) {
 		System.out.println("Sending proof, listening for challenge");
-		ptp.setReceiveListener(new ReceiveListener() {
+		wallet.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
@@ -141,7 +141,7 @@ public class ChallengeResponseVerifier {
 				ECDSASignature signature = sign(hash, signingKey);			
 				byte[] serializedSignature = signature.encodeToDER();
 				System.out.println("received and solved challenge, listening for confirmation");
-				ptp.setReceiveListener(new ReceiveListener() {
+				wallet.ptp.setReceiveListener(new ReceiveListener() {
 					
 					@Override
 					public void messageReceived(byte[] arg0, Identifier arg1) {
@@ -152,11 +152,11 @@ public class ChallengeResponseVerifier {
 						}
 					}
 				});
-				ptp.sendMessage(serializedSignature , mixPartnerAdress);
+				wallet.ptp.sendMessage(serializedSignature , mixPartnerAdress);
 				
 			}
 		});
-		ptp.sendMessage(serialize(message), mixPartnerAdress);
+		wallet.ptp.sendMessage(serialize(message), mixPartnerAdress);
 	}
 
 

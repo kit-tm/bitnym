@@ -171,6 +171,21 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		this.listeners.remove(l);
 	}
 
+	public BroadcastAnnouncement getNewestBroadcast() throws NoBroadcastAnnouncementsException {
+		if(broadcasts.size() == 0) {
+			throw new NoBroadcastAnnouncementsException();
+		}
+		Transaction tx = broadcasts.get(0);
+		for (Transaction t : broadcasts) {
+			if (tx.getLockTime() < t.getLockTime()) {
+				tx = t;
+			}
+		}
+		assert(tx != null);
+		//TODO substitute magic number 1 for constant "outputOffsetOfBroadcastAnnouncementOpReturn"
+		return BroadcastAnnouncement.deserialize(tx.getOutput(1).getScriptBytes());
+	}
+
 	public BroadcastAnnouncement getRandomBroadcast() throws NoBroadcastAnnouncementsException {
 		if(broadcasts.size() == 0) {
 			throw new NoBroadcastAnnouncementsException();

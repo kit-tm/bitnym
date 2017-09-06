@@ -14,6 +14,7 @@ import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionBroadcast;
+import org.bitcoinj.core.TransactionBroadcast.ProgressCallback;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.script.Script;
@@ -29,10 +30,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 public class TransactionGenerator {
 	
 	private static final Logger log = LoggerFactory.getLogger(TransactionGenerator.class);
-
-	//TODO move constants to utility class
-	public static Coin PROOF_OF_BURN = Coin.valueOf(50000);
-	public static Coin PSNYMVALUE = Coin.valueOf(1000000);
 
 	private NetworkParameters params;
 
@@ -60,19 +57,20 @@ public class TransactionGenerator {
 		//TODO refactoring: use smaller string for less tx fees
 		byte[] opretData = "xxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes();
 		//wallet Balance is not sufficient
-		if (w.getBalance().isLessThan(PROOF_OF_BURN)) {
-			throw new InsufficientMoneyException(PROOF_OF_BURN.minus(w.getBalance()));
+		if (w.getBalance().isLessThan(BitNymWallet.PROOF_OF_BURN)) {
+			throw new InsufficientMoneyException(BitNymWallet.PROOF_OF_BURN.minus(w.getBalance()));
 		}
 
 
 
 		//add marker output
-		tx.addOutput(PROOF_OF_BURN, ScriptBuilder.createOpReturnScript(opretData));
+		tx.addOutput(BitNymWallet.PROOF_OF_BURN, ScriptBuilder.createOpReturnScript(opretData));
 
 		//add pseudonym output
 		ECKey psnymKey = new ECKey();
 		long unixTime = System.currentTimeMillis() / 1000L;
 		//TODO use bitcoin bip113 time
+		tx.setLockTime(CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
 		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, CLTVScriptPair.currentBitcoinBIP113Time(bc)+lockTime);
 		System.out.println(sp.toString());
 		assert(sp != null);
@@ -90,7 +88,7 @@ public class TransactionGenerator {
 //			tx.addInput(next);
 //		}
 		//create p2sh output, for possibility of freezing funds to prove it is utxo
-		tx.addOutput(new TransactionOutput(params, tx, PSNYMVALUE, sp.getPubKeyScript().getProgram()));
+		tx.addOutput(new TransactionOutput(params, tx, BitNymWallet.PSNYMVALUE, sp.getPubKeyScript().getProgram()));
 
 		ECKey changeKey = new ECKey();
 		Address changeAdrs = new Address(params, changeKey.getPubKeyHash());
@@ -143,9 +141,9 @@ public class TransactionGenerator {
 	
 	
 	
-	public void sendBroadcastAnnouncement(BroadcastAnnouncement ba, File f, ProofMessage pm, int lockTime) throws InsufficientMoneyException {
+	public void sendBroadcastAnnouncement(BroadcastAnnouncement ba, File f, final ProofMessage pm, int lockTime) throws InsufficientMoneyException {
 		//build transaction
-		Transaction tx = new Transaction(params);
+		final Transaction tx = new Transaction(params);
 		
 		Script s = ba.buildScript();
 		System.out.println("Script size is " + s.SIG_SIZE);
@@ -154,7 +152,7 @@ public class TransactionGenerator {
 		long unixTime = System.currentTimeMillis() / 1000L;
 		//TODO use bitcoin nets median time
 		tx.setLockTime(CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
-		CLTVScriptPair sp = new CLTVScriptPair(psnymKey, CLTVScriptPair.currentBitcoinBIP113Time(bc)+lockTime);
+		final CLTVScriptPair sp = new CLTVScriptPair(psnymKey, CLTVScriptPair.currentBitcoinBIP113Time(bc)+lockTime);
 		w.importKey(psnymKey);
 		tx.addOutput(new TransactionOutput(params, tx, pm.getLastTransactionOutput().getValue().subtract(estimateBroadcastFee()), sp.getPubKeyScript().getProgram()));
 		tx.addOutput(Coin.ZERO, s);
@@ -170,9 +168,17 @@ public class TransactionGenerator {
 		}
 		
 		TransactionBroadcast broadcast = pg.broadcastTransaction(tx);
-		pm.addTransaction(tx, 0, sp);
-		pm.writeToFile();
-		System.out.println("save broadcast announcement to file");
+		broadcast.setProgressCallback(new ProgressCallback() {
+
+			@Override
+			public void onBroadcastProgress(double arg0) {
+				if (arg0 == 1) {
+					pm.addTransaction(tx, 0, sp);
+					pm.writeToFile();
+					System.out.println("save broadcast announcement to file");
+				}
+			}
+		});
 		
 		
 
