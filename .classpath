@@ -2,8 +2,8 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="/home/sebastian/demonstrator_fairnet/bitnym_library/bitcoinj-core-0.14.4-bundled.jar"/>
-	<classpathentry kind="lib" path="/home/sebastian/demonstrator_fairnet/bitnym_library/PTP-full.jar"/>
-	<classpathentry kind="lib" path="/home/sebastian/demonstrator_fairnet/bitnym_library/slf4j-simple-1.7.21.jar"/>
+	<classpathentry kind="lib" path="../../jars/libs/bitcoinj-core-0.14.4-bundled.jar"/>
+	<classpathentry kind="lib" path="../../jars/libs/PTP-full.jar" sourcepath="../PTP/src/main"/>
+	<classpathentry kind="lib" path="../../jars/libs/slf4j-simple-1.7.21.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
