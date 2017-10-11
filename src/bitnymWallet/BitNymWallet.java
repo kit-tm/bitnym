@@ -17,20 +17,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.BloomFilter;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.InsufficientMoneyException;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.Peer;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionConfidence;
+import org.bitcoinj.core.*;
 import org.bitcoinj.core.TransactionConfidence.Listener;
-import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
 import org.bitcoinj.core.listeners.PeerConnectedEventListener;
 import org.bitcoinj.net.BlockingClientManager;
@@ -90,7 +78,7 @@ public class BitNymWallet {
 		//MainClass.params = TestNet3Params.get();
 		MainClass.params = RegTestParams.get();
 		params = MainClass.params;
-
+		//Context context = new Context(params);
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
@@ -317,6 +305,13 @@ public class BitNymWallet {
 		System.out.println("Exiting Bitnym bitcoin peer group");
 		pg.stop();
 		System.out.println("Done exiting Bitnym");
+		// close spvbs to release file lock for reinitialising bitnym
+		try {
+			spvbs.close();
+		} catch (BlockStoreException e) {
+			System.out.println("Debug: spvbs close failed!");
+			e.printStackTrace();
+		}
 	}
 	
 	
