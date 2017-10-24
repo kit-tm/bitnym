@@ -24,7 +24,6 @@ import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.wallet.Wallet;
 
 import edu.kit.tm.ptp.Identifier;
-import edu.kit.tm.ptp.PTP;
 import edu.kit.tm.ptp.ReceiveListener;
 import edu.kit.tm.ptp.SendListener;
 
@@ -44,6 +43,8 @@ public class Mixer {
 	private PeerGroup pg;
 	private BlockChain bc;
 	private List<MixFinishedEventListener> mfListeners;
+	private List<MixAbortEventListener> maListeners;
+	private List<MixPassiveEventListener> mpListeners;
 	private int lockTime;
 	private boolean successful;
 	
@@ -58,6 +59,8 @@ public class Mixer {
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
+		this.maListeners = new ArrayList<MixAbortEventListener>();
+		this.mpListeners = new ArrayList<MixPassiveEventListener>();
 		this.lockTime = 0; 
 	}
 	
@@ -72,6 +75,8 @@ public class Mixer {
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
+		this.maListeners = new ArrayList<MixAbortEventListener>();
+		this.mpListeners = new ArrayList<MixPassiveEventListener>();
 		this.lockTime = 0;
 
 	}
@@ -85,10 +90,13 @@ public class Mixer {
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
+		this.maListeners = new ArrayList<MixAbortEventListener>();
+		this.mpListeners = new ArrayList<MixPassiveEventListener>();
 		this.lockTime = 0;
 	}
 	
-	public void passiveMix(byte[] arg0) {
+	public void passiveMix(byte[] arg0, Identifier arg1) {
+		mixPartnerAdress = arg1;
 		wallet.ptp.setSendListener(new SendListener() {
 
 	        @Override
@@ -112,6 +120,7 @@ public class Mixer {
 		this.partnerProof = (ProofMessage) deserialize(arg0);
 		if(!partnerProof.isProbablyValid(params, bc, pg)) {
 			System.out.println("proof of mix partner is invalid");
+			mixAbort();
 			return;
 		}
 		//send own proof to partner
@@ -126,6 +135,7 @@ public class Mixer {
 				final Transaction rcvdTx = deserializeTransaction(arg0);
 				if(!checkTxInputIsFromProof(rcvdTx, 0)) {
 					System.out.println("checktxinput is from proof failed");
+					mixAbort();
 					return;
 				}
 				final int outputOrder = rcvdTx.getOutputs().size();
@@ -267,6 +277,7 @@ public class Mixer {
 				System.out.println("check partner proof");
 				if(!partnerProof.isProbablyValid(params, bc, pg)) {
 					System.out.println("proof of mix partner is invalid, abort");
+					mixAbort();
 					return;
 				}
 				challengeResponse();
@@ -297,6 +308,17 @@ public class Mixer {
 //				// TODO Auto-generated catch block
 //				e.printStackTrace();
 //			}
+		}
+	}
+	private void mixAbort() {
+		for (MixAbortEventListener listener : maListeners) {
+			listener.onMixAborted();
+		}
+	}
+
+	private void mixPassiveStarted(byte[] arg0, Identifier arg1) {
+		for (MixPassiveEventListener listener : mpListeners) {
+			listener.onMixPassive(arg0,arg1);
 		}
 	}
 
@@ -352,8 +374,8 @@ public class Mixer {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
-						mixPartnerAdress = arg1;
-						passiveMix(arg0);
+				System.out.println("Mix request received, mixing passive");
+				mixPassiveStarted(arg0, arg1);
 			}
 		});
 
@@ -486,7 +508,8 @@ public class Mixer {
 				@Override
 				public void messageReceived(byte[] arg0, Identifier arg1) {
 					// add our output, sign and send to partner then
-					final Transaction penFinalTx = deserializeTransaction(arg0);
+					try {
+						final Transaction penFinalTx = deserializeTransaction(arg0);
 					if(!checkTxInputIsFromProof(penFinalTx, 1)) {
 						System.out.println("checktxinputisfromproof failed");
 					}
@@ -511,6 +534,11 @@ public class Mixer {
 					});
 					wallet.ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
 					System.out.println("done");
+					} catch (Exception e) {
+						e.printStackTrace();
+						mixAbort();
+						return;
+					}
 				}
 			});
 			this.wallet.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
@@ -653,6 +681,22 @@ public class Mixer {
 	public void removeMixFinishedEventListener(MixFinishedEventListener listener) {
 		mfListeners.remove(listener);
 	}
+
+	public void addMixAbortEventListener(MixAbortEventListener listener) {
+		maListeners.add(listener);
+	}
+
+	public void removeMixAbortEventListener(MixAbortEventListener listener) {
+		maListeners.remove(listener);
+	}
+
+	public void addMixPassiveEventListener(MixPassiveEventListener listener) {
+		mpListeners.add(listener);
+	}
+
+	public void removeMixPassiveEventListener(MixPassiveEventListener listener) {
+		mpListeners.remove(listener);
+	}
 	
 	public void setMixPartnerAdress(String onion) {
 		this.mixPartnerAdress = new Identifier(onion);
@@ -665,6 +709,9 @@ public class Mixer {
 	public void setBroadcastAnnouncement(BroadcastAnnouncement bca) {
 		this.bca = bca;
 		this.mixPartnerAdress = new Identifier(bca.getOnionAdress() + ".onion");
+	}
+	public List<MixAbortEventListener> getMaListeners() {
+		return maListeners;
 	}
 
 

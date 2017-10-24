@@ -17,6 +17,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import edu.kit.tm.ptp.Identifier;
 import org.bitcoinj.core.*;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
@@ -78,7 +79,8 @@ public class BitNymWallet {
 		//MainClass.params = TestNet3Params.get();
 		MainClass.params = RegTestParams.get();
 		params = MainClass.params;
-		//Context context = new Context(params);
+		// TODO(PM) use context as parameter at certain methods to avoid bitcoin warinings
+		Context context = new Context(params);
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
@@ -89,7 +91,7 @@ public class BitNymWallet {
 		wallet = null;
 		walletFile = new File("./wallet.wa");
 		if(!walletFile.exists()) {
-			wallet = new Wallet(params);
+			wallet = new Wallet(context);
 			try {
 				wallet.saveToFile(walletFile);
 			} catch (IOException e) {
@@ -295,7 +297,13 @@ public class BitNymWallet {
 		filter.insert(BroadcastAnnouncement.magicNumber);
 		downloadpeer.setBloomFilter(filter);
 	}
-	
+
+	private void mixAbort() {
+		for (MixAbortEventListener listener : m.getMaListeners()) {
+			listener.onMixAborted();
+		}
+	}
+
 	
 	
 	public void exit() {
@@ -392,9 +400,11 @@ public class BitNymWallet {
 	public void mixWithNewestBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
 		if(pm.isEmpty()) {
 			System.out.println("mixWithNewestBroadcast aborted: No own proof message");
+			mixAbort();
 			return;
 		} else if(pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
 			System.out.println("mixWithNewestBroadcast aborted: Last transaction is not yet verified " + pm.getLastTransaction().toString());
+			mixAbort();
 			return;
 		} else {
 			m.setBroadcastAnnouncement(mpd.getNewestBroadcast());
@@ -409,9 +419,11 @@ public class BitNymWallet {
 		//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
 		if(pm.isEmpty()) {	
 			System.out.println("mixWithRandomBroadcast aborted: No own proof message");
+			mixAbort();
 			return;
 		} else if(pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
 			System.out.println("mixWithRandomBroadcast aborted: Last transaction is not yet verified " + pm.getLastTransaction().toString());
+			mixAbort();
 			return;
 		} else {
 			m.setBroadcastAnnouncement(mpd.getRandomBroadcast());
@@ -460,6 +472,10 @@ public class BitNymWallet {
 	public void addMixFinishedEventListener(MixFinishedEventListener listener) {
 		m.addMixFinishedEventListener(listener);
 	}
+
+	public void addMixAbortEventListener(MixAbortEventListener listener) {m.addMixAbortEventListener(listener);}
+
+	public void addMixPassiveEventListener(MixPassiveEventListener listener) {m.addMixPassiveEventListener(listener);}
 	
 	public void removeProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
 		pm.removeProofConfidenceChangeEventListener(listener);
@@ -479,6 +495,17 @@ public class BitNymWallet {
 		m.removeMixFinishedEventListener(listener);
 	}
 
+	public void removeMixAbortEventListener(MixAbortEventListener listener) {
+		m.removeMixAbortEventListener(listener);
+	}
+
+	public void removeMixPassiveEventListener(MixPassiveEventListener listener) {
+		m.removeMixPassiveEventListener(listener);
+	}
+
+	public void mixPassive(byte[] arg0, Identifier arg1) {
+		m.passiveMix(arg0,arg1);
+	}
 
 
 	public Transaction getLastTransaction() {
@@ -626,6 +653,18 @@ public class BitNymWallet {
 
 	public ECKey getPseudonym() {
 		return wallet.findKeyFromPubHash(pm.getScriptPair().getPubKeyHash());
+	}
+
+	/**
+	 * Only for testing
+	 * @return ptp identifier
+	 */
+	public Identifier getIdentifier() {
+		if (ptp.isInitialized()) {
+			return ptp.getIdentifier();
+		} else {
+			return null;
+		}
 	}
 
 }
