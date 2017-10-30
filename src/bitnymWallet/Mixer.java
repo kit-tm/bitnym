@@ -47,6 +47,10 @@ public class Mixer {
 	private List<MixPassiveEventListener> mpListeners;
 	private int lockTime;
 	private boolean successful;
+	/**
+	 * True if currently mixing, false otherwise. Used to avoid mixing more than once at a time
+	 */
+	private boolean mixing= false;
 	
 	//get the onion mix adress from a broadcastannouncement
 	public Mixer(BitNymWallet wallet, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
@@ -95,8 +99,7 @@ public class Mixer {
 		this.lockTime = 0;
 	}
 	
-	public void passiveMix(byte[] arg0, Identifier arg1) {
-		mixPartnerAdress = arg1;
+	public void passiveMix(byte[] arg0) {
 		wallet.ptp.setSendListener(new SendListener() {
 
 	        @Override
@@ -228,7 +231,11 @@ public class Mixer {
 
 	
 	public void initiateMix() {
-		
+		if (mixing) {
+			// already mixing , do not initiatemix
+			System.out.println("already mixing passive! Can't mix active");
+			return;
+		}
 		System.out.println("is ptp initialized? " + wallet.ptp.isInitialized());
 				
 		wallet.ptp.setSendListener(new SendListener() {
@@ -256,6 +263,7 @@ public class Mixer {
 		
 		//exchange proofs
 		System.out.println("initiateMix");
+		mixing = true;
 		if(this.mixPartnerAdress == null) {
 			System.out.println("No mix partner");
 		}
@@ -316,9 +324,9 @@ public class Mixer {
 		}
 	}
 
-	private void mixPassiveStarted(byte[] arg0, Identifier arg1) {
+	private void mixPassiveStarted(byte[] arg0) {
 		for (MixPassiveEventListener listener : mpListeners) {
-			listener.onMixPassive(arg0,arg1);
+			listener.onMixPassive(arg0);
 		}
 	}
 
@@ -375,7 +383,15 @@ public class Mixer {
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
 				System.out.println("Mix request received, mixing passive");
-				mixPassiveStarted(arg0, arg1);
+				if (mixing) {
+					// mixing active, do not mix passive
+					System.out.println("Mixing active, can't mix passive");
+					return;
+				}
+				mixPartnerAdress = arg1;
+				mixing = true;
+				mixPassiveStarted(arg0);
+				passiveMix(arg0);
 			}
 		});
 
@@ -395,6 +411,10 @@ public class Mixer {
 	//check that partner used the proper transactioninput announced in corresponding proof
 	//right output coin value etc.
 	private boolean checkTx(Transaction mixTx, Transaction rcvdTxToCheck) {
+		if(rcvdTxToCheck == null) {
+			System.out.println("checktx failed, transaction null");
+			return false;
+		}
 		if(rcvdTxToCheck.getInputs().size() > 2 || rcvdTxToCheck.getOutputs().size() > 2) {
 			System.out.println("checktx failed, num of txinputs is " + rcvdTxToCheck.getInputs().size() +
 					" num of outputs is " + rcvdTxToCheck.getOutputs().size());
@@ -591,6 +611,7 @@ public class Mixer {
 				wallet.restartPTP();
 				for(MixFinishedEventListener l : mfListeners) {
 					assert(mfListeners.size() <= 1);
+					mixing = false;
 					l.onMixFinished();
 				}				
 			}
@@ -668,6 +689,7 @@ public class Mixer {
 		});
 		System.out.println("commited mixtx to wallet");
 		for(MixFinishedEventListener l : mfListeners) {
+			mixing = false;
 			l.onMixFinished();
 		}
 		//TODO add confidence change event listener, then add to end of proof message

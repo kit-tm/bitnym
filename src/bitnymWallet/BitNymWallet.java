@@ -12,9 +12,7 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import edu.kit.tm.ptp.Identifier;
@@ -68,9 +66,19 @@ public class BitNymWallet {
 	private List<ProofConfidenceChangeEventListener> proofChangeConfidenceListeners;
 	private List<ProofChangeEventListener> proofChangeListeners;
 	private List<TimeChangedEventListener> timeChangedListeners;
-	//private List<BroadcastAnnouncementChangeEventListener> baListeners;
-	//private List<MixFinishedEventListener> mfListeners;
+	private List<MixingEventListener> mixListeners;
 	private ChallengeResponseVerifier crv;
+
+	// from BitNymWrapper
+	/**
+	 * true if listener added to mixer, false otherwise. Set to false on re initialising after successful mixing
+	 */
+	private boolean listenerAdded = false;
+
+	/**
+	 * true if mixing finished or aborted, Timer will stop
+	 */
+	private boolean stopTimeout = false;
 
 	//TODO refactoring: extend bitcoinj wallet and remove wallet field, pass this to functions which need wallet
 	
@@ -84,7 +92,7 @@ public class BitNymWallet {
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
-
+		mixListeners = new ArrayList<MixingEventListener>();
 
 		//ptp = new PTP(System.getProperty("user.dir"), 9051, 9050);
 		restartPTP();
@@ -297,13 +305,6 @@ public class BitNymWallet {
 		filter.insert(BroadcastAnnouncement.magicNumber);
 		downloadpeer.setBloomFilter(filter);
 	}
-
-	private void mixAbort() {
-		for (MixAbortEventListener listener : m.getMaListeners()) {
-			listener.onMixAborted();
-		}
-	}
-
 	
 	
 	public void exit() {
@@ -312,7 +313,6 @@ public class BitNymWallet {
 		ptp.deleteHiddenService();
 		System.out.println("Exiting Bitnym bitcoin peer group");
 		pg.stop();
-		System.out.println("Done exiting Bitnym");
 		// close spvbs to release file lock for reinitialising bitnym
 		try {
 			spvbs.close();
@@ -320,6 +320,7 @@ public class BitNymWallet {
 			System.out.println("Debug: spvbs close failed!");
 			e.printStackTrace();
 		}
+		System.out.println("Done exiting Bitnym");
 	}
 	
 	
@@ -400,11 +401,9 @@ public class BitNymWallet {
 	public void mixWithNewestBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
 		if(pm.isEmpty()) {
 			System.out.println("mixWithNewestBroadcast aborted: No own proof message");
-			mixAbort();
 			return;
 		} else if(pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
 			System.out.println("mixWithNewestBroadcast aborted: Last transaction is not yet verified " + pm.getLastTransaction().toString());
-			mixAbort();
 			return;
 		} else {
 			m.setBroadcastAnnouncement(mpd.getNewestBroadcast());
@@ -419,11 +418,9 @@ public class BitNymWallet {
 		//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
 		if(pm.isEmpty()) {	
 			System.out.println("mixWithRandomBroadcast aborted: No own proof message");
-			mixAbort();
 			return;
 		} else if(pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
 			System.out.println("mixWithRandomBroadcast aborted: Last transaction is not yet verified " + pm.getLastTransaction().toString());
-			mixAbort();
 			return;
 		} else {
 			m.setBroadcastAnnouncement(mpd.getRandomBroadcast());
@@ -431,6 +428,152 @@ public class BitNymWallet {
 			m.setLockTime(lockTime);
 			m.initiateMix();
 		}		
+	}
+
+	private void reinitMixer() {
+		m = new Mixer(this, pm, wallet, params, pg, bc);
+	}
+
+	// Timeout to abort mixing after a certain time
+	private void startTimeout() {
+		Thread thread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				System.out.println("DEBUG: Timeout started");
+				stopTimeout = false;
+				int timeout = 2 * 60;
+				while (timeout > 0 && stopTimeout == false) {
+					try {
+						Thread.sleep(1000);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					System.out.println(timeout);
+					timeout--;
+				}
+				if (timeout <= 0 && !stopTimeout) {
+					// abort mixing, create new mixer, listener inactive until doMix() is called
+					System.out.println("Mixing aborted");
+					mixAborted();
+				}
+			}
+		});
+		thread.start();
+	}
+
+	private void mixAborted() {
+		// remove old mixer and create new one after abort event (removes listeners, state etc)
+		reinitMixer();
+		listenerAdded = false;
+		stopTimeout = true;
+		for (MixingEventListener listener : mixListeners) {
+			System.out.println("DEBUG: Listener event");
+			listener.onMixAborted();
+		}
+	}
+
+	private void mixFinished() {
+		for (MixingEventListener listener : mixListeners) {
+			System.out.println("DEBUG: Listener event");
+			listener.onMixFinished();
+		}
+	}
+
+	/**
+	 * Starts mixing if broadcast is available, otherwise send broadcast und listen for mix
+	 * @param lockTime
+	 */
+	public void doMix(int lockTime) {
+		listenForMix();
+		if(!listenerAdded) {
+			this.addMixFinishedEventListener(new MixFinishedEventListener() {
+
+				@Override
+				public void onMixFinished() {
+					stopTimeout = true;
+					mixFinished();
+				}
+			});
+
+			this.addMixPassiveEventListener(new MixPassiveEventListener() {
+				@Override
+				public void onMixPassive(byte[] arg0) {
+					startTimeout();
+				}
+			});
+
+			this.addMixAbortEventListener(new MixAbortEventListener() {
+
+				@Override
+				public void onMixAborted() {
+					mixAborted();
+				}
+			});
+
+			// check if mixing is possible every time a new broadcast is received
+			this.addBroadcastAnnouncementChangeEventListener(new BroadcastAnnouncementChangeEventListener() {
+				@Override
+				public void onBroadcastAnnouncementChanged() {
+					System.out.println("DEBUG: BroadcastAnnouncementChange Received");
+					// Remove old broadcasts (older than four minutes)
+					System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
+					Set<Transaction> to_remove = new HashSet<Transaction>();
+					for (Transaction t : getBroadcastAnnouncements()) {
+						// Locktime is interpreted as the time when the broadcast has been created
+						if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (4 * 60)) {
+							to_remove.add(t);
+						}
+					}
+					getBroadcastAnnouncements().removeAll(to_remove);
+					System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
+
+					if (getBroadcastAnnouncements().isEmpty()) {
+						// do nothing
+					} else {
+						// There are broadcasts, mix with one of them
+						try {
+							System.out.println("Trying to mix with broadcast");
+							mixWithNewestBroadcast(lockTime);
+							startTimeout();
+							// Remove all stored broadcasts since one of them has been used
+							getBroadcastAnnouncements().clear();
+						} catch (NoBroadcastAnnouncementsException e1) {
+							// Should not happen
+							e1.printStackTrace();
+						}
+					}
+
+				}
+			});
+			listenerAdded = true;
+		}
+		// Remove old broadcasts (older than four minutes)
+		System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
+		Set<Transaction> to_remove = new HashSet<Transaction>();
+		for (Transaction t : getBroadcastAnnouncements()) {
+			// Locktime is interpreted as the time when the broadcast has been created
+			if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (4 * 60)) {
+				to_remove.add(t);
+			}
+		}
+		getBroadcastAnnouncements().removeAll(to_remove);
+		System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
+
+		if (getBroadcastAnnouncements().isEmpty()) {
+			// Send a broadcast ourself
+			sendBroadcastAnnouncement(0);
+		} else {
+			// There are broadcasts, mix with one of them
+			try {
+				startTimeout();
+				mixWithNewestBroadcast(lockTime);
+				// Remove all stored broadcasts since one of them has been used
+				getBroadcastAnnouncements().clear();
+			} catch (NoBroadcastAnnouncementsException e1) {
+				// Should not happen
+				e1.printStackTrace();
+			}
+		}
 	}
 	/*
 	public void mixWith(BroadcastAnnouncement ba) {
@@ -476,6 +619,8 @@ public class BitNymWallet {
 	public void addMixAbortEventListener(MixAbortEventListener listener) {m.addMixAbortEventListener(listener);}
 
 	public void addMixPassiveEventListener(MixPassiveEventListener listener) {m.addMixPassiveEventListener(listener);}
+
+	public void addMixingEventListener(MixingEventListener listener) {mixListeners.add(listener);}
 	
 	public void removeProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
 		pm.removeProofConfidenceChangeEventListener(listener);
@@ -503,8 +648,8 @@ public class BitNymWallet {
 		m.removeMixPassiveEventListener(listener);
 	}
 
-	public void mixPassive(byte[] arg0, Identifier arg1) {
-		m.passiveMix(arg0,arg1);
+	public void mixPassive(byte[] arg0) {
+		m.passiveMix(arg0);
 	}
 
 
