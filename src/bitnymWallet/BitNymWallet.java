@@ -87,7 +87,7 @@ public class BitNymWallet {
 		//MainClass.params = TestNet3Params.get();
 		MainClass.params = RegTestParams.get();
 		params = MainClass.params;
-		// TODO(PM) use context as parameter at certain methods to avoid bitcoin warinings
+		// TODO(PM) use context as parameter at certain methods to avoid bitcoinj warnings
 		Context context = new Context(params);
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
@@ -431,6 +431,7 @@ public class BitNymWallet {
 	}
 
 	private void reinitMixer() {
+		stopListeningForMix();
 		m = new Mixer(this, pm, wallet, params, pg, bc);
 	}
 
@@ -448,7 +449,6 @@ public class BitNymWallet {
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
-					System.out.println(timeout);
 					timeout--;
 				}
 				if (timeout <= 0 && !stopTimeout) {
@@ -473,9 +473,18 @@ public class BitNymWallet {
 	}
 
 	private void mixFinished() {
+		stopTimeout = true;
 		for (MixingEventListener listener : mixListeners) {
 			System.out.println("DEBUG: Listener event");
 			listener.onMixFinished();
+		}
+	}
+
+	private void mixStarted() {
+		startTimeout();
+		for (MixingEventListener listener : mixListeners) {
+			System.out.println("DEBUG: Listener event");
+			listener.onMixStarted();
 		}
 	}
 
@@ -490,15 +499,14 @@ public class BitNymWallet {
 
 				@Override
 				public void onMixFinished() {
-					stopTimeout = true;
 					mixFinished();
 				}
 			});
 
-			this.addMixPassiveEventListener(new MixPassiveEventListener() {
+			this.addMixPassiveEventListener(new MixStartedEventListener() {
 				@Override
-				public void onMixPassive(byte[] arg0) {
-					startTimeout();
+				public void onMixStarted() {
+					mixStarted();
 				}
 			});
 
@@ -534,7 +542,6 @@ public class BitNymWallet {
 						try {
 							System.out.println("Trying to mix with broadcast");
 							mixWithNewestBroadcast(lockTime);
-							startTimeout();
 							// Remove all stored broadcasts since one of them has been used
 							getBroadcastAnnouncements().clear();
 						} catch (NoBroadcastAnnouncementsException e1) {
@@ -565,7 +572,6 @@ public class BitNymWallet {
 		} else {
 			// There are broadcasts, mix with one of them
 			try {
-				startTimeout();
 				mixWithNewestBroadcast(lockTime);
 				// Remove all stored broadcasts since one of them has been used
 				getBroadcastAnnouncements().clear();
@@ -618,7 +624,7 @@ public class BitNymWallet {
 
 	public void addMixAbortEventListener(MixAbortEventListener listener) {m.addMixAbortEventListener(listener);}
 
-	public void addMixPassiveEventListener(MixPassiveEventListener listener) {m.addMixPassiveEventListener(listener);}
+	public void addMixPassiveEventListener(MixStartedEventListener listener) {m.addMixPassiveEventListener(listener);}
 
 	public void addMixingEventListener(MixingEventListener listener) {mixListeners.add(listener);}
 	
@@ -644,7 +650,7 @@ public class BitNymWallet {
 		m.removeMixAbortEventListener(listener);
 	}
 
-	public void removeMixPassiveEventListener(MixPassiveEventListener listener) {
+	public void removeMixPassiveEventListener(MixStartedEventListener listener) {
 		m.removeMixPassiveEventListener(listener);
 	}
 

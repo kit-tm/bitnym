@@ -44,7 +44,7 @@ public class Mixer {
 	private BlockChain bc;
 	private List<MixFinishedEventListener> mfListeners;
 	private List<MixAbortEventListener> maListeners;
-	private List<MixPassiveEventListener> mpListeners;
+	private List<MixStartedEventListener> mpListeners;
 	private int lockTime;
 	private boolean successful;
 	/**
@@ -64,7 +64,7 @@ public class Mixer {
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
 		this.maListeners = new ArrayList<MixAbortEventListener>();
-		this.mpListeners = new ArrayList<MixPassiveEventListener>();
+		this.mpListeners = new ArrayList<MixStartedEventListener>();
 		this.lockTime = 0; 
 	}
 	
@@ -80,7 +80,7 @@ public class Mixer {
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
 		this.maListeners = new ArrayList<MixAbortEventListener>();
-		this.mpListeners = new ArrayList<MixPassiveEventListener>();
+		this.mpListeners = new ArrayList<MixStartedEventListener>();
 		this.lockTime = 0;
 
 	}
@@ -95,7 +95,7 @@ public class Mixer {
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
 		this.maListeners = new ArrayList<MixAbortEventListener>();
-		this.mpListeners = new ArrayList<MixPassiveEventListener>();
+		this.mpListeners = new ArrayList<MixStartedEventListener>();
 		this.lockTime = 0;
 	}
 	
@@ -225,17 +225,26 @@ public class Mixer {
 	
 	private boolean checkTxInputIsFromProof(Transaction rcvdTx, int i) {
 		//return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
-		return rcvdTx.getInput(i).getOutpoint().getHash().equals(partnerProof.getLastTransaction().getHash()) &&
-				partnerProof.getLastTransactionOutput().getIndex() == rcvdTx.getInput(i).getOutpoint().getIndex();
+		// TODO sometimes index i is too high (1, but array size of rcvdTx only 1)
+		try {
+			return rcvdTx.getInput(i).getOutpoint().getHash().equals(partnerProof.getLastTransaction().getHash()) &&
+					partnerProof.getLastTransactionOutput().getIndex() == rcvdTx.getInput(i).getOutpoint().getIndex();
+		} catch (IndexOutOfBoundsException e) {
+			System.out.println("Transaction index too high, abort mixing");
+			e.printStackTrace();
+			return false;
+		}
 	}
 
 	
 	public void initiateMix() {
 		if (mixing) {
 			// already mixing , do not initiatemix
-			System.out.println("already mixing passive! Can't mix active");
+			System.out.println("already mixing! Can't mix active");
 			return;
 		}
+		mixing = true;
+		mixStarted();
 		System.out.println("is ptp initialized? " + wallet.ptp.isInitialized());
 				
 		wallet.ptp.setSendListener(new SendListener() {
@@ -263,7 +272,6 @@ public class Mixer {
 		
 		//exchange proofs
 		System.out.println("initiateMix");
-		mixing = true;
 		if(this.mixPartnerAdress == null) {
 			System.out.println("No mix partner");
 		}
@@ -319,14 +327,15 @@ public class Mixer {
 		}
 	}
 	private void mixAbort() {
+		mixing = false;
 		for (MixAbortEventListener listener : maListeners) {
 			listener.onMixAborted();
 		}
 	}
 
-	private void mixPassiveStarted(byte[] arg0) {
-		for (MixPassiveEventListener listener : mpListeners) {
-			listener.onMixPassive(arg0);
+	private void mixStarted() {
+		for (MixStartedEventListener listener : mpListeners) {
+			listener.onMixStarted();
 		}
 	}
 
@@ -385,12 +394,12 @@ public class Mixer {
 				System.out.println("Mix request received, mixing passive");
 				if (mixing) {
 					// mixing active, do not mix passive
-					System.out.println("Mixing active, can't mix passive");
+					System.out.println("Already mixing, can't mix passive");
 					return;
 				}
 				mixPartnerAdress = arg1;
 				mixing = true;
-				mixPassiveStarted(arg0);
+				mixStarted();
 				passiveMix(arg0);
 			}
 		});
@@ -500,10 +509,14 @@ public class Mixer {
 						System.out.println("checktx failed");
 					}
 					//sign transaction and send it to the network
-
-					rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
-					rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
-
+					try {
+						rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
+						rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
+					} catch (Exception e) {
+						e.printStackTrace();
+						mixAbort();
+						return;
+					}
 					//this method just does rudimentary checks, does not check whether inputs are already spent for example
 					rcvdTx.verify();
 
@@ -712,11 +725,11 @@ public class Mixer {
 		maListeners.remove(listener);
 	}
 
-	public void addMixPassiveEventListener(MixPassiveEventListener listener) {
+	public void addMixPassiveEventListener(MixStartedEventListener listener) {
 		mpListeners.add(listener);
 	}
 
-	public void removeMixPassiveEventListener(MixPassiveEventListener listener) {
+	public void removeMixPassiveEventListener(MixStartedEventListener listener) {
 		mpListeners.remove(listener);
 	}
 	

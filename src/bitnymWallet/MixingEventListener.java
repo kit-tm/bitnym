@@ -6,5 +6,7 @@ package bitnymWallet;
 public interface MixingEventListener {
     void onMixAborted();
 
+    void onMixStarted();
+
     void onMixFinished();
 }
