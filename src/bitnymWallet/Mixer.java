@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import edu.kit.tm.ptp.MessageReceivedListener;
 import org.bitcoinj.core.BitcoinSerializer;
 import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Coin;
@@ -300,7 +301,7 @@ public class Mixer {
 				
 			}
 		});
-		this.wallet.ptp.sendMessage(serializedProof, mixPartnerAdress);
+		this.wallet.ptp.sendMessage(new MixRequestMessage(serializedProof), mixPartnerAdress);
 		System.out.println("done");
 //		try {
 //			TimeUnit.SECONDS.sleep(30);
@@ -387,6 +388,27 @@ public class Mixer {
 		System.out.println("listen for mix to start passive mixing with");
 		assert(this.wallet != null);
 		assert(this.wallet.ptp != null);
+		this.wallet.ptp.setReceiveListener(MixRequestMessage.class, new MessageReceivedListener<MixRequestMessage>() {
+			@Override
+			public void messageReceived(MixRequestMessage mixRequestMessage, Identifier source) {
+				System.out.println("Mix request received, mixing passive");
+				if (mixing) {
+					// mixing active, do not mix passive
+					System.out.println("Already mixing, can't mix passive");
+					System.out.println("Check if simultaneously mixing active");
+					if (mixPartnerAdress.equals(source)) {
+						// necessary to check if mixing active?
+						System.out.println("Assertion: simultaneously mixiing active, abort now");
+						mixAbort();
+					}
+					return;
+				}
+				mixPartnerAdress = source;
+				mixing = true;
+				mixStarted();
+				passiveMix(mixRequestMessage.data);
+			}
+		});
 		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
@@ -413,6 +435,14 @@ public class Mixer {
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
 				
+			}
+		});
+
+		// override all message types
+		this.wallet.ptp.setReceiveListener(MixRequestMessage.class, new MessageReceivedListener<MixRequestMessage>() {
+			@Override
+			public void messageReceived(MixRequestMessage mixRequestMessage, Identifier identifier) {
+				// ignore
 			}
 		});
 	}

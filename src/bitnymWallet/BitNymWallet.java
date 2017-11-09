@@ -69,6 +69,8 @@ public class BitNymWallet {
 	private List<MixingEventListener> mixListeners;
 	private ChallengeResponseVerifier crv;
 
+	BroadcastAnnouncementChangeEventListener broadcastListener;
+
 	// from BitNymWrapper
 	/**
 	 * true if listener added to mixer, false otherwise. Set to false on re initialising after successful mixing
@@ -96,6 +98,11 @@ public class BitNymWallet {
 
 		//ptp = new PTP(System.getProperty("user.dir"), 9051, 9050);
 		restartPTP();
+
+		// register classes for ptp used in Mixer
+        ptp.registerClass(MixRequestMessage.class);
+
+
 		wallet = null;
 		walletFile = new File("./wallet.wa");
 		if(!walletFile.exists()) {
@@ -432,6 +439,7 @@ public class BitNymWallet {
 
 	private void reinitMixer() {
 		stopListeningForMix();
+		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
 		m = new Mixer(this, pm, wallet, params, pg, bc);
 	}
 
@@ -519,7 +527,8 @@ public class BitNymWallet {
 			});
 
 			// check if mixing is possible every time a new broadcast is received
-			this.addBroadcastAnnouncementChangeEventListener(new BroadcastAnnouncementChangeEventListener() {
+
+			broadcastListener = new BroadcastAnnouncementChangeEventListener() {
 				@Override
 				public void onBroadcastAnnouncementChanged() {
 					System.out.println("DEBUG: BroadcastAnnouncementChange Received");
@@ -551,7 +560,8 @@ public class BitNymWallet {
 					}
 
 				}
-			});
+			};
+			this.addBroadcastAnnouncementChangeEventListener(broadcastListener);
 			listenerAdded = true;
 		}
 		// Remove old broadcasts (older than four minutes)
