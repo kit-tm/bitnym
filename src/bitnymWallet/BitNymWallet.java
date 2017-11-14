@@ -51,6 +51,7 @@ public class BitNymWallet {
 
 	
 	private NetworkParameters params;
+	private Context context;
 	private PeerGroup pg;
 	PTP ptp;
 	private TransactionGenerator tg;
@@ -90,7 +91,7 @@ public class BitNymWallet {
 		MainClass.params = RegTestParams.get();
 		params = MainClass.params;
 		// TODO(PM) use context as parameter at certain methods to avoid bitcoinj warnings
-		Context context = new Context(params);
+		context = new Context(params);
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
@@ -132,7 +133,7 @@ public class BitNymWallet {
 			e.printStackTrace();
 		}
 		try {
-			bc = new BlockChain(params, wallet, spvbs);
+			bc = new BlockChain(context, wallet, spvbs);
 		} catch (BlockStoreException e) {
 			e.printStackTrace();
 		}
@@ -151,7 +152,7 @@ public class BitNymWallet {
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
 		//System.setProperty("socksProxyHost", "127.0.0.1");
 		//System.setProperty("socksProxyPort", "9050");
-		pg = new PeerGroup(params, bc, new BlockingClientManager());
+		pg = new PeerGroup(context, bc, new BlockingClientManager());
 		pg.addWallet(wallet);
 
 		//TODO DNS through Tor without Orchid, as it is not maintained
@@ -338,6 +339,7 @@ public class BitNymWallet {
 	 *         or not enough money exists
 	 */
 	public boolean generateGenesisTransaction(int lockTime) {
+		Context.propagate(context);
 		//generate genesis transaction if our proof is empty
 		if(pm.getValidationPath().size() != 0 || !wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
 			return false;
@@ -501,6 +503,7 @@ public class BitNymWallet {
 	 * @param lockTime
 	 */
 	public void doMix(int lockTime) {
+		Context.propagate(context);
 		listenForMix();
 		if(!listenerAdded) {
 			this.addMixFinishedEventListener(new MixFinishedEventListener() {
