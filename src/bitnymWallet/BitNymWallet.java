@@ -13,7 +13,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import edu.kit.tm.ptp.Identifier;
 import org.bitcoinj.core.*;
@@ -36,7 +39,7 @@ import edu.kit.tm.ptp.PTP;
 
 
 public class BitNymWallet {
-	
+
 	// TODO(SF): Clean up all this ptp.receive(byte[]) stuff and use seperate classes for it
 
 	//TODO check before mixing that proof passed the bitcoin bip113 time, so that it is free to be spend
@@ -72,6 +75,11 @@ public class BitNymWallet {
 
 	BroadcastAnnouncementChangeEventListener broadcastListener;
 
+	/** time in minutes a broadcast is valid
+	 *
+	 */
+	private final int BROADCAST_TIME = 10;
+
 	// from BitNymWrapper
 	/**
 	 * true if listener added to mixer, false otherwise. Set to false on re initialising after successful mixing
@@ -102,6 +110,8 @@ public class BitNymWallet {
 
 		// register classes for ptp used in Mixer
         ptp.registerClass(MixRequestMessage.class);
+        ptp.registerClass(SendProofMessage.class);
+        ptp.registerClass(MixAbortMessage.class);
 
 
 		wallet = null;
@@ -230,9 +240,6 @@ public class BitNymWallet {
 
 		log.info("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
 		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
-
-
-		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
 		
 		/*
 		// Send all coins back to faucet
@@ -258,9 +265,9 @@ public class BitNymWallet {
 		System.out.println("addblocksdownloadedeventlistener");
 
 
-		tg = new TransactionGenerator(params, pg, wallet, bc);
+		tg = new TransactionGenerator(context, pg, wallet, bc);
 		
-		m = new Mixer(this, pm, wallet, params, pg, bc);
+		m = new Mixer(this, pm, wallet, context, pg, bc);
 		
 		crv = new ChallengeResponseVerifier(this, wallet, params, pg, bc);
 
@@ -370,6 +377,7 @@ public class BitNymWallet {
 	}
 	
 	public void sendBroadcastAnnouncement(int lockTime) {
+		Context.propagate(context);
 		try {
 			System.out.println("sendBroadcastAnnouncement");
 			//if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
@@ -423,6 +431,7 @@ public class BitNymWallet {
 	}
 
 	public void mixWithRandomBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
+		Context.propagate(context);
 		//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
 		if(pm.isEmpty()) {	
@@ -442,7 +451,7 @@ public class BitNymWallet {
 	private void reinitMixer() {
 		stopListeningForMix();
 		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
-		m = new Mixer(this, pm, wallet, params, pg, bc);
+		m = new Mixer(this, pm, wallet, context, pg, bc);
 	}
 
 	// Timeout to abort mixing after a certain time
@@ -452,7 +461,7 @@ public class BitNymWallet {
 			public void run() {
 				System.out.println("DEBUG: Timeout started");
 				stopTimeout = false;
-				int timeout = 2 * 60;
+				int timeout = 4 * 60;
 				while (timeout > 0 && stopTimeout == false) {
 					try {
 						Thread.sleep(1000);
@@ -463,7 +472,7 @@ public class BitNymWallet {
 				}
 				if (timeout <= 0 && !stopTimeout) {
 					// abort mixing, create new mixer, listener inactive until doMix() is called
-					System.out.println("Mixing aborted");
+					System.out.println("Mixing aborted: Mixing timed out");
 					mixAborted();
 				}
 			}
@@ -477,15 +486,16 @@ public class BitNymWallet {
 		listenerAdded = false;
 		stopTimeout = true;
 		for (MixingEventListener listener : mixListeners) {
-			System.out.println("DEBUG: Listener event");
 			listener.onMixAborted();
 		}
 	}
 
 	private void mixFinished() {
+		// stop mixing again
+		stopListeningForMix();
+		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
 		stopTimeout = true;
 		for (MixingEventListener listener : mixListeners) {
-			System.out.println("DEBUG: Listener event");
 			listener.onMixFinished();
 		}
 	}
@@ -493,7 +503,6 @@ public class BitNymWallet {
 	private void mixStarted() {
 		startTimeout();
 		for (MixingEventListener listener : mixListeners) {
-			System.out.println("DEBUG: Listener event");
 			listener.onMixStarted();
 		}
 	}
@@ -540,7 +549,7 @@ public class BitNymWallet {
 					Set<Transaction> to_remove = new HashSet<Transaction>();
 					for (Transaction t : getBroadcastAnnouncements()) {
 						// Locktime is interpreted as the time when the broadcast has been created
-						if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (4 * 60)) {
+						if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
 							to_remove.add(t);
 						}
 					}
@@ -569,10 +578,17 @@ public class BitNymWallet {
 		}
 		// Remove old broadcasts (older than four minutes)
 		System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
+		System.out.println("Wait random time to receive broadcasts before sending own.");
+		int randomTime = (int) (Math.random() * (5000));
+		try {
+			Thread.sleep(randomTime);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 		Set<Transaction> to_remove = new HashSet<Transaction>();
 		for (Transaction t : getBroadcastAnnouncements()) {
 			// Locktime is interpreted as the time when the broadcast has been created
-			if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (4 * 60)) {
+			if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
 				to_remove.add(t);
 			}
 		}
@@ -581,7 +597,14 @@ public class BitNymWallet {
 
 		if (getBroadcastAnnouncements().isEmpty()) {
 			// Send a broadcast ourself
+			// check what time broadcast would have
+			long bcTime = (CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
+			System.out.println("Broadcast is " + bcTime + " old");
 			sendBroadcastAnnouncement(0);
+			if (bcTime < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
+				System.out.println("Broadcast would be too old. Send new one");
+				mixAborted();
+			}
 		} else {
 			// There are broadcasts, mix with one of them
 			try {
@@ -666,11 +689,6 @@ public class BitNymWallet {
 	public void removeMixPassiveEventListener(MixStartedEventListener listener) {
 		m.removeMixPassiveEventListener(listener);
 	}
-
-	public void mixPassive(byte[] arg0) {
-		m.passiveMix(arg0);
-	}
-
 
 	public Transaction getLastTransaction() {
 		return this.pm.getLastTransaction();
@@ -762,6 +780,7 @@ public class BitNymWallet {
 	 * @return null on failure, contained pubkey on success
 	 */
 	public byte[] checkProof(byte[] proof) {
+		Context.propagate(context);
 		try (ByteArrayInputStream bis = new ByteArrayInputStream(proof); ObjectInput in = new ObjectInputStream(bis)) {
 			ProofMessage other_pm = (ProofMessage) in.readObject();
 			if (!other_pm.isProbablyValid(MainClass.params, bc, pg)) {
@@ -828,6 +847,15 @@ public class BitNymWallet {
 			return ptp.getIdentifier();
 		} else {
 			return null;
+		}
+	}
+
+	public void sendMessage(Object message, Identifier ident) {
+		try {
+			ptp.sendMessage(message, ident);
+		} catch (IllegalStateException e) {
+			System.err.println("BitNym Unable to send message over PTP! Continuing anyway.");
+			e.printStackTrace();
 		}
 	}
 

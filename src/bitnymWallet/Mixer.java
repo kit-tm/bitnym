@@ -11,17 +11,7 @@ import java.util.List;
 import java.util.Random;
 
 import edu.kit.tm.ptp.MessageReceivedListener;
-import org.bitcoinj.core.BitcoinSerializer;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.ProtocolException;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionBroadcast;
-import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.TransactionOutput;
+import org.bitcoinj.core.*;
 import org.bitcoinj.wallet.Wallet;
 
 import edu.kit.tm.ptp.Identifier;
@@ -40,6 +30,7 @@ public class Mixer {
 	private Identifier mixPartnerAdress;
 	private ProofMessage ownProof, partnerProof;
 	private Wallet w;
+	private Context context;
 	private NetworkParameters params;
 	private PeerGroup pg;
 	private BlockChain bc;
@@ -54,13 +45,14 @@ public class Mixer {
 	private boolean mixing= false;
 	
 	//get the onion mix adress from a broadcastannouncement
-	public Mixer(BitNymWallet wallet, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
+	public Mixer(BitNymWallet wallet, BroadcastAnnouncement bca, ProofMessage pm, Wallet w, Context context, PeerGroup pg, BlockChain bc) {
 		this.wallet = wallet;
 		this.bca = bca;
 		this.mixPartnerAdress = new Identifier(bca.getOnionAdress() + ".onion");
 		this.ownProof = pm;
 		this.w = w;
-		this.params = params;
+		this.context = context;
+		this.params = context.getParams();
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
@@ -71,12 +63,13 @@ public class Mixer {
 	
 	
 	//get onionAdress directly
-	public Mixer(BitNymWallet wallet, String onionAddress, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
+	public Mixer(BitNymWallet wallet, String onionAddress, ProofMessage pm, Wallet w, Context context, PeerGroup pg, BlockChain bc) {
 		this.wallet = wallet;
 		this.mixPartnerAdress = new Identifier(onionAddress);
 		this.ownProof = pm;
 		this.w = w;
-		this.params = params;
+		this.context = context;
+		this.params = context.getParams();
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
@@ -87,11 +80,12 @@ public class Mixer {
 	}
 	
 	//constructor for just listening
-	public Mixer(BitNymWallet wallet, ProofMessage pm, Wallet w, NetworkParameters params, PeerGroup pg, BlockChain bc) {
+	public Mixer(BitNymWallet wallet, ProofMessage pm, Wallet w, Context context, PeerGroup pg, BlockChain bc) {
 		this.wallet = wallet;
 		this.ownProof = pm;
 		this.w = w;
-		this.params = params;
+		this.context = context;
+		this.params = context.getParams();
 		this.pg = pg;
 		this.bc = bc;
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
@@ -101,6 +95,7 @@ public class Mixer {
 	}
 	
 	public void passiveMix(byte[] arg0) {
+		Context.propagate(context);
 		wallet.ptp.setSendListener(new SendListener() {
 
 	        @Override
@@ -119,24 +114,36 @@ public class Mixer {
 	          }
 	        }
 	      });
+
+		// add listener for MixAbortMessage, which is sent by mixpartner on abort
+		this.wallet.ptp.setReceiveListener(MixAbortMessage.class, new MessageReceivedListener<MixAbortMessage>() {
+			@Override
+			public void messageReceived(MixAbortMessage msg, Identifier identifier) {
+				System.out.println("Passive: Abort received from " + identifier);
+				mixAbort();
+			}
+		});
+		System.out.println("Passive: Sending ping to " + mixPartnerAdress);
 		//received serialized proof, so deserialize, and check proof
 		System.out.println("check partner proof");
 		this.partnerProof = (ProofMessage) deserialize(arg0);
 		if(!partnerProof.isProbablyValid(params, bc, pg)) {
 			System.out.println("proof of mix partner is invalid");
+			sendAbort(mixPartnerAdress);
 			mixAbort();
 			return;
 		}
 		//send own proof to partner
 		System.out.println("listen for first part of mix transaction");
-		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
+		this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 			@Override
-			public void messageReceived(byte[] arg0, Identifier arg1) {
+			public void messageReceived(SendProofMessage msg, Identifier arg1) {
+				System.out.println("DEBUG: Passive Mix, first part of mix received");
 				//deserialize received tx, and add own input and output and
 				//sign then and send back
 				System.out.println("try to deserialize tx received from mixpartner");
-				final Transaction rcvdTx = deserializeTransaction(arg0);
+				final Transaction rcvdTx = deserializeTransaction(msg.data);
 				if(!checkTxInputIsFromProof(rcvdTx, 0)) {
 					System.out.println("checktxinput is from proof failed");
 					mixAbort();
@@ -164,13 +171,13 @@ public class Mixer {
 					//add our output first
 					System.out.println("partner didn't add first output, we'll add the first output and sign later");
 					System.out.println("listen for complete mix transaction, we started");
-					wallet.ptp.setReceiveListener(new ReceiveListener() {
+					wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 						
 						@Override
-						public void messageReceived(byte[] arg0, Identifier arg1) {
+						public void messageReceived(SendProofMessage msg, Identifier arg1) {
 							//deserialize tx, check rcvd Tx, then sign and broadcast
 							
-							Transaction lastTxVersion = deserializeTransaction(arg0);
+							Transaction lastTxVersion = deserializeTransaction(msg.data);
 							if(!checkTx(rcvdTx, lastTxVersion)) {
 								System.out.println("checktx failed");
 								//return;
@@ -181,7 +188,7 @@ public class Mixer {
 							broadcastMixTx(outputOrder, outSp,lastTxVersion, 1);							
 						}
 					});
-					wallet.ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
+					wallet.sendMessage(new SendProofMessage(rcvdTx.bitcoinSerialize()), mixPartnerAdress);
 					System.out.println("done");
 
 				} else if(outputOrder == 1) {
@@ -195,23 +202,24 @@ public class Mixer {
 					
 					//rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					System.out.println("listen for complete mix transaction. other started");
-					wallet.ptp.setReceiveListener(new ReceiveListener() {
+					wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 						
 						@Override
-						public void messageReceived(byte[] arg0, Identifier arg1) {
-									// TODO Auto-generated method stub
-									if(!checkTx(rcvdTx, deserializeTransaction(arg0))) {
-										System.out.println("checktx failed");
-										//return;
-									}
-									commitRcvdFinalTx(outSp, arg0, 1, outputOrder);
-									System.out.println("commited tx, create new hidden service");
-									wallet.restartPTP();
+						public void messageReceived(SendProofMessage msg, Identifier arg1) {
+							System.out.println("Passive, last message received. Check and restart ptp");
+							// TODO Auto-generated method stub
+							if(!checkTx(rcvdTx, deserializeTransaction(msg.data))) {
+								System.out.println("checktx failed");
+								//return;
+							}
+							commitRcvdFinalTx(outSp, msg.data, 1, outputOrder);
+							System.out.println("commited tx, create new hidden service");
+							wallet.restartPTP();
 						}
 
 						
 					});
-					wallet.ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
+					wallet.sendMessage(new SendProofMessage(rcvdTx.bitcoinSerialize()), mixPartnerAdress);
 					System.out.println("done");
 
 				}
@@ -220,7 +228,8 @@ public class Mixer {
 
 
 		});
-		this.wallet.ptp.sendMessage(serialize(ownProof), mixPartnerAdress);
+		this.wallet.sendMessage(new SendProofMessage(serialize(ownProof)), mixPartnerAdress);
+		//this.wallet.sendMessage(serialize(ownProof), mixPartnerAdress);
 		System.out.println("done");
 	}
 	
@@ -267,14 +276,15 @@ public class Mixer {
 	          }
 	        }
 	      });
-		
-		
+
 		//handshake?
 		
 		//exchange proofs
 		System.out.println("initiateMix");
 		if(this.mixPartnerAdress == null) {
 			System.out.println("No mix partner");
+			mixAbort();
+			return; //? why no return
 		}
 		
 		byte[] serializedProof = null;
@@ -284,16 +294,18 @@ public class Mixer {
 		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
 		//ping();
 		System.out.println("listen for proof (first message of mix(?))");
-		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
+		this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 			
 			//deserialize proof
 			@Override
-			public void messageReceived(byte[] arg0, Identifier arg1) {
-				partnerProof = (ProofMessage) deserialize(arg0);
+			public void messageReceived(SendProofMessage msg, Identifier arg1) {
+				System.out.println("Mix active, first message received, try starting challenge response");
+				partnerProof = (ProofMessage) deserialize(msg.data);
 				//check proof
 				System.out.println("check partner proof");
 				if(!partnerProof.isProbablyValid(params, bc, pg)) {
 					System.out.println("proof of mix partner is invalid, abort");
+					sendAbort(mixPartnerAdress);
 					mixAbort();
 					return;
 				}
@@ -301,7 +313,17 @@ public class Mixer {
 				
 			}
 		});
-		this.wallet.ptp.sendMessage(new MixRequestMessage(serializedProof), mixPartnerAdress);
+		this.wallet.sendMessage(new MixRequestMessage(serializedProof), mixPartnerAdress);
+
+		// add listener for MixAbortMessage, which is sent by mixpartner on abort
+		this.wallet.ptp.setReceiveListener(MixAbortMessage.class, new MessageReceivedListener<MixAbortMessage>() {
+			@Override
+			public void messageReceived(MixAbortMessage msg, Identifier identifier) {
+				System.out.println("Active: Abort received from " + identifier);
+				mixAbort();
+			}
+		});
+
 		System.out.println("done");
 //		try {
 //			TimeUnit.SECONDS.sleep(30);
@@ -332,6 +354,10 @@ public class Mixer {
 		for (MixAbortEventListener listener : maListeners) {
 			listener.onMixAborted();
 		}
+	}
+
+	private void sendAbort(Identifier ident) {
+		wallet.ptp.sendMessage(new MixAbortMessage(), ident);
 	}
 
 	private void mixStarted() {
@@ -398,7 +424,7 @@ public class Mixer {
 					System.out.println("Check if simultaneously mixing active");
 					if (mixPartnerAdress.equals(source)) {
 						// necessary to check if mixing active?
-						System.out.println("Assertion: simultaneously mixiing active, abort now");
+						System.out.println("Assertion: simultaneously mixing active, abort now");
 						mixAbort();
 					}
 					return;
@@ -407,22 +433,6 @@ public class Mixer {
 				mixing = true;
 				mixStarted();
 				passiveMix(mixRequestMessage.data);
-			}
-		});
-		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
-			
-			@Override
-			public void messageReceived(byte[] arg0, Identifier arg1) {
-				System.out.println("Mix request received, mixing passive");
-				if (mixing) {
-					// mixing active, do not mix passive
-					System.out.println("Already mixing, can't mix passive");
-					return;
-				}
-				mixPartnerAdress = arg1;
-				mixing = true;
-				mixStarted();
-				passiveMix(arg0);
 			}
 		});
 
@@ -441,7 +451,19 @@ public class Mixer {
 		// override all message types
 		this.wallet.ptp.setReceiveListener(MixRequestMessage.class, new MessageReceivedListener<MixRequestMessage>() {
 			@Override
-			public void messageReceived(MixRequestMessage mixRequestMessage, Identifier identifier) {
+			public void messageReceived(MixRequestMessage msg, Identifier identifier) {
+				// ignore
+			}
+		});
+		this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
+			@Override
+			public void messageReceived(SendProofMessage msg, Identifier identifier) {
+				// ignore
+			}
+		});
+		this.wallet.ptp.setReceiveListener(MixAbortMessage.class, new MessageReceivedListener<MixAbortMessage>() {
+			@Override
+			public void messageReceived(MixAbortMessage msg, Identifier identifier) {
 				// ignore
 			}
 		});
@@ -488,6 +510,7 @@ public class Mixer {
 	}
 	
 	private void mixAndConstructNewProof() {
+		Context.propagate(context);
 		//mix
 		System.out.println("try to mix and construct new proof");
 		final Transaction mixTx = new Transaction(params);
@@ -526,11 +549,11 @@ public class Mixer {
 
 			//check tx, sign it, then send it out to the bitcoin network
 			System.out.println("listen for transaction to sign while mixing, we started");
-			this.wallet.ptp.setReceiveListener(new ReceiveListener() {
+			this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 				@Override
-				public void messageReceived(byte[] arg0, Identifier arg1) {
-					final Transaction rcvdTx = deserializeTransaction(arg0);
+				public void messageReceived(SendProofMessage msg, Identifier arg1) {
+					final Transaction rcvdTx = deserializeTransaction(msg.data);
 					if(!checkTxInputIsFromProof(rcvdTx, 1)) {
 						System.out.println("tx input from received tx is not the same as in the proof");
 						//return;
@@ -558,7 +581,7 @@ public class Mixer {
 
 
 			});
-			this.wallet.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
+			this.wallet.sendMessage(new SendProofMessage(serializedTx), this.mixPartnerAdress);
 			System.out.println("done");
 		} else {
 			//let the mixpartner add his output first and partners input
@@ -566,13 +589,13 @@ public class Mixer {
 			//and let the partner sign the tx
 			serializedTx = mixTx.bitcoinSerialize();
 			System.out.println("listen for transaction of partner to add ours to, he starts");
-			this.wallet.ptp.setReceiveListener(new ReceiveListener() {
+			this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 				@Override
-				public void messageReceived(byte[] arg0, Identifier arg1) {
+				public void messageReceived(SendProofMessage msg, Identifier arg1) {
 					// add our output, sign and send to partner then
 					try {
-						final Transaction penFinalTx = deserializeTransaction(arg0);
+						final Transaction penFinalTx = deserializeTransaction(msg.data);
 					if(!checkTxInputIsFromProof(penFinalTx, 1)) {
 						System.out.println("checktxinputisfromproof failed");
 					}
@@ -583,19 +606,20 @@ public class Mixer {
 					penFinalTx.getInput(0).setScriptSig(inSp.calculateSigScript(penFinalTx, 0, w));
 					penFinalTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 					System.out.println("listen for complete mix transaction");
-					wallet.ptp.setReceiveListener(new ReceiveListener() {
+					wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 						@Override
-						public void messageReceived(byte[] arg0, Identifier arg1) {
-									// TODO Auto-generated method stub
-									if(!checkTx(penFinalTx, deserializeTransaction(arg0))) {
-										System.out.println("checktx failed");
-									}
-									commitRcvdFinalTx(outSp, arg0, 0, outputOrder);
-									wallet.restartPTP();
+						public void messageReceived(SendProofMessage msg, Identifier arg1) {
+							System.out.println("Active last Message received");
+							// TODO Auto-generated method stub
+							if(!checkTx(penFinalTx, deserializeTransaction(msg.data))) {
+								System.out.println("checktx failed");
+							}
+							commitRcvdFinalTx(outSp, msg.data, 0, outputOrder);
+							wallet.restartPTP();
 						}
 					});
-					wallet.ptp.sendMessage(penFinalTx.bitcoinSerialize(), mixPartnerAdress);
+					wallet.sendMessage(new SendProofMessage(penFinalTx.bitcoinSerialize()), mixPartnerAdress);
 					System.out.println("done");
 					} catch (Exception e) {
 						e.printStackTrace();
@@ -604,7 +628,7 @@ public class Mixer {
 					}
 				}
 			});
-			this.wallet.ptp.sendMessage(serializedTx, this.mixPartnerAdress);
+			this.wallet.sendMessage(new SendProofMessage(serializedTx), this.mixPartnerAdress);
 			System.out.println("done");
 		}
 	}
@@ -659,7 +683,7 @@ public class Mixer {
 				}				
 			}
 		});
-		wallet.ptp.sendMessage(rcvdTx.bitcoinSerialize(), mixPartnerAdress);
+		wallet.sendMessage(new SendProofMessage(rcvdTx.bitcoinSerialize()), mixPartnerAdress);
 		System.out.println("done");
 		assert(rcvdTx != null);
 		TransactionBroadcast broadcast = pg.broadcastTransaction(rcvdTx);
