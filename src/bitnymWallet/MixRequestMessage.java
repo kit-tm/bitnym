@@ -14,7 +14,10 @@ public class MixRequestMessage {
 
     public MixRequestMessage(byte[] data) {
         this.data = data;
+        this.timeStamp = System.currentTimeMillis();
     }
 
     public byte[] data;
+
+    public long timeStamp;
 }

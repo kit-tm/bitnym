@@ -5,18 +5,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.InsufficientMoneyException;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionBroadcast;
+import org.bitcoinj.core.*;
 import org.bitcoinj.core.TransactionBroadcast.ProgressCallback;
-import org.bitcoinj.core.TransactionOutput;
-import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.wallet.SendRequest;
@@ -39,9 +29,12 @@ public class TransactionGenerator {
 
 	private BlockChain bc;
 
+	private Context context;
 
-	public TransactionGenerator(NetworkParameters params, PeerGroup pg, Wallet w, BlockChain bc) {
-		this.params = params;
+
+	public TransactionGenerator(Context context, PeerGroup pg, Wallet w, BlockChain bc) {
+		this.context = context;
+		this.params = context.getParams();
 		this.pg = pg;
 		this.w = w;
 		this.bc = bc;
@@ -172,6 +165,7 @@ public class TransactionGenerator {
 
 			@Override
 			public void onBroadcastProgress(double arg0) {
+				Context.propagate(context);
 				if (arg0 == 1) {
 					pm.addTransaction(tx, 0, sp);
 					pm.writeToFile();

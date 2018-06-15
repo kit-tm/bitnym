@@ -39,6 +39,7 @@ public class Mixer {
 	private List<MixStartedEventListener> mpListeners;
 	private int lockTime;
 	private boolean successful;
+	private long mixRequestTimestamp = 0;
 	/**
 	 * True if currently mixing, false otherwise. Used to avoid mixing more than once at a time
 	 */
@@ -120,17 +121,16 @@ public class Mixer {
 			@Override
 			public void messageReceived(MixAbortMessage msg, Identifier identifier) {
 				System.out.println("Passive: Abort received from " + identifier);
-				mixAbort();
+				mixAbort(10);
 			}
 		});
-		System.out.println("Passive: Sending ping to " + mixPartnerAdress);
 		//received serialized proof, so deserialize, and check proof
 		System.out.println("check partner proof");
 		this.partnerProof = (ProofMessage) deserialize(arg0);
-		if(!partnerProof.isProbablyValid(params, bc, pg)) {
+		if(!partnerProof.isProbablyValid(params, bc, pg)) { //TODO is it possible that invalid is returned although it should be valid?
 			System.out.println("proof of mix partner is invalid");
 			sendAbort(mixPartnerAdress);
-			mixAbort();
+			mixAbort(5);
 			return;
 		}
 		//send own proof to partner
@@ -146,7 +146,8 @@ public class Mixer {
 				final Transaction rcvdTx = deserializeTransaction(msg.data);
 				if(!checkTxInputIsFromProof(rcvdTx, 0)) {
 					System.out.println("checktxinput is from proof failed");
-					mixAbort();
+					mixAbort(5);
+					sendAbort(mixPartnerAdress);
 					return;
 				}
 				final int outputOrder = rcvdTx.getOutputs().size();
@@ -237,6 +238,9 @@ public class Mixer {
 		//return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
 		// TODO sometimes index i is too high (1, but array size of rcvdTx only 1)
 		try {
+			System.out.println("DEBUG: transaction for comparison " + rcvdTx.getInput(i).getOutpoint().toString() + "(" + rcvdTx.getInput(i).getOutpoint().getHash() + ")");
+			System.out.println("DEBUG: last transaction of parnter " + partnerProof.getLastTransaction().toString() + "(" + partnerProof.getLastTransaction().getHash() + ")");
+			System.out.println("DEBUG: Index 1(Partner): " + partnerProof.getLastTransactionOutput().getIndex() + ", Index 2(TX): " + rcvdTx.getInput(i).getOutpoint().getIndex());
 			return rcvdTx.getInput(i).getOutpoint().getHash().equals(partnerProof.getLastTransaction().getHash()) &&
 					partnerProof.getLastTransactionOutput().getIndex() == rcvdTx.getInput(i).getOutpoint().getIndex();
 		} catch (IndexOutOfBoundsException e) {
@@ -283,7 +287,7 @@ public class Mixer {
 		System.out.println("initiateMix");
 		if(this.mixPartnerAdress == null) {
 			System.out.println("No mix partner");
-			mixAbort();
+			mixAbort(1);
 			return; //? why no return
 		}
 		
@@ -305,22 +309,24 @@ public class Mixer {
 				System.out.println("check partner proof");
 				if(!partnerProof.isProbablyValid(params, bc, pg)) {
 					System.out.println("proof of mix partner is invalid, abort");
+					mixAbort(5);
 					sendAbort(mixPartnerAdress);
-					mixAbort();
 					return;
 				}
 				challengeResponse();
 				
 			}
 		});
-		this.wallet.sendMessage(new MixRequestMessage(serializedProof), mixPartnerAdress);
+		MixRequestMessage mixRequestMessage = new MixRequestMessage(serializedProof);
+		this.wallet.sendMessage(mixRequestMessage, mixPartnerAdress);
+		mixRequestTimestamp = mixRequestMessage.timeStamp;
 
 		// add listener for MixAbortMessage, which is sent by mixpartner on abort
 		this.wallet.ptp.setReceiveListener(MixAbortMessage.class, new MessageReceivedListener<MixAbortMessage>() {
 			@Override
 			public void messageReceived(MixAbortMessage msg, Identifier identifier) {
 				System.out.println("Active: Abort received from " + identifier);
-				mixAbort();
+				mixAbort(10);
 			}
 		});
 
@@ -349,10 +355,10 @@ public class Mixer {
 //			}
 		}
 	}
-	private void mixAbort() {
+	private void mixAbort(int errorCode) {
 		mixing = false;
 		for (MixAbortEventListener listener : maListeners) {
-			listener.onMixAborted();
+			listener.onMixAborted(errorCode);
 		}
 	}
 
@@ -424,8 +430,28 @@ public class Mixer {
 					System.out.println("Check if simultaneously mixing active");
 					if (mixPartnerAdress.equals(source)) {
 						// necessary to check if mixing active?
-						System.out.println("Assertion: simultaneously mixing active, abort now");
-						mixAbort();
+						System.out.println("Assertion: simultaneously mixing active");
+						System.out.println("Check who would have been first:");
+						System.out.println(mixRequestMessage.timeStamp);
+						System.out.println(mixRequestTimestamp);
+						System.out.println(mixRequestMessage.timeStamp - mixRequestTimestamp);
+						if (mixRequestTimestamp != 0) {
+							if(mixRequestTimestamp == mixRequestMessage.timeStamp) {
+								// abort
+								System.out.println("Can't determine active/passive");
+								mixAbort(11);
+								return;
+							}
+							if (mixRequestMessage.timeStamp > mixRequestTimestamp) {
+								//own Request was faster mix active, other should have same result and mix passive
+								System.out.println("Would stay active");
+								//mixAbort(11);
+								return;
+							}
+						}
+						System.out.println("Would be passive");
+						passiveMix(mixRequestMessage.data);
+						//mixAbort(11);
 					}
 					return;
 				}
@@ -567,7 +593,8 @@ public class Mixer {
 						rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 					} catch (Exception e) {
 						e.printStackTrace();
-						mixAbort();
+						mixAbort(5);
+						sendAbort(mixPartnerAdress);
 						return;
 					}
 					//this method just does rudimentary checks, does not check whether inputs are already spent for example
@@ -623,7 +650,8 @@ public class Mixer {
 					System.out.println("done");
 					} catch (Exception e) {
 						e.printStackTrace();
-						mixAbort();
+						mixAbort(5);
+						sendAbort(mixPartnerAdress);
 						return;
 					}
 				}

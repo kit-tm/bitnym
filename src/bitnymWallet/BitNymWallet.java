@@ -13,12 +13,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import edu.kit.tm.ptp.Identifier;
+import edu.kit.tm.ptp.MessageReceivedListener;
 import org.bitcoinj.core.*;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
@@ -78,7 +76,7 @@ public class BitNymWallet {
 	/** time in minutes a broadcast is valid
 	 *
 	 */
-	private final int BROADCAST_TIME = 10;
+	private final int BROADCAST_TIME = 30;
 
 	// from BitNymWrapper
 	/**
@@ -109,10 +107,17 @@ public class BitNymWallet {
 		restartPTP();
 
 		// register classes for ptp used in Mixer
-        ptp.registerClass(MixRequestMessage.class);
-        ptp.registerClass(SendProofMessage.class);
-        ptp.registerClass(MixAbortMessage.class);
+		ptp.registerClass(MixRequestMessage.class);
+		ptp.registerClass(SendProofMessage.class);
+		ptp.registerClass(MixAbortMessage.class);
+		ptp.registerClass(TestMessage.class);
+		ptp.setReceiveListener(TestMessage.class, new MessageReceivedListener<TestMessage>() {
 
+			@Override
+			public void messageReceived(TestMessage message, Identifier source) {
+				System.out.println("TestMessage received from " + source.getTorAddress());
+			}
+		});
 
 		wallet = null;
 		walletFile = new File("./wallet.wa");
@@ -473,20 +478,29 @@ public class BitNymWallet {
 				if (timeout <= 0 && !stopTimeout) {
 					// abort mixing, create new mixer, listener inactive until doMix() is called
 					System.out.println("Mixing aborted: Mixing timed out");
-					mixAborted();
+					mixAborted(0);
 				}
 			}
 		});
 		thread.start();
 	}
 
-	private void mixAborted() {
+	/**
+	 *
+	 * @param errorCode
+	 * case 0: abortMessage = "Timeout";
+	 * case 1: abortMessage = "Partner not found";
+	 * case 5: abortMessage = "Partner proof Invalid/could not check TX";
+	 * case 10: abortMessage = "Partner aborted";
+	 * case 11: abortMessage = "Mixing active simultaneously";
+	 */
+	private void mixAborted(int errorCode) {
 		// remove old mixer and create new one after abort event (removes listeners, state etc)
 		reinitMixer();
 		listenerAdded = false;
 		stopTimeout = true;
 		for (MixingEventListener listener : mixListeners) {
-			listener.onMixAborted();
+			listener.onMixAborted(errorCode);
 		}
 	}
 
@@ -533,8 +547,8 @@ public class BitNymWallet {
 			this.addMixAbortEventListener(new MixAbortEventListener() {
 
 				@Override
-				public void onMixAborted() {
-					mixAborted();
+				public void onMixAborted(int errorCode) {
+					mixAborted(errorCode);
 				}
 			});
 
@@ -603,7 +617,7 @@ public class BitNymWallet {
 			sendBroadcastAnnouncement(0);
 			if (bcTime < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
 				System.out.println("Broadcast would be too old. Send new one");
-				mixAborted();
+				mixAborted(100);
 			}
 		} else {
 			// There are broadcasts, mix with one of them
@@ -780,10 +794,12 @@ public class BitNymWallet {
 	 * @return null on failure, contained pubkey on success
 	 */
 	public byte[] checkProof(byte[] proof) {
+		System.out.println("DEBUG BitWallet: Check proof");
 		Context.propagate(context);
 		try (ByteArrayInputStream bis = new ByteArrayInputStream(proof); ObjectInput in = new ObjectInputStream(bis)) {
 			ProofMessage other_pm = (ProofMessage) in.readObject();
 			if (!other_pm.isProbablyValid(MainClass.params, bc, pg)) {
+				System.out.println("DEBUG BitWallet: other_pm is probably invalid");
 				return null;
 			}
 			return other_pm.getScriptPair().getPubKey();

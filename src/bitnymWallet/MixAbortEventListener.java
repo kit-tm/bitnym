@@ -2,6 +2,6 @@ package bitnymWallet;
 
 public interface MixAbortEventListener {
 
-    public void onMixAborted();
+    public void onMixAborted(int errorCode);
 
 }
