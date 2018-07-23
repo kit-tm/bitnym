@@ -69,14 +69,16 @@ public class BitNymWallet {
 	private List<ProofChangeEventListener> proofChangeListeners;
 	private List<TimeChangedEventListener> timeChangedListeners;
 	private List<MixingEventListener> mixListeners;
+	private List<WaitForDataListener> waitForDataListeners;
 	private ChallengeResponseVerifier crv;
 
 	BroadcastAnnouncementChangeEventListener broadcastListener;
+	TransactionGeneratorListener tgListener;
 
 	/** time in minutes a broadcast is valid
 	 *
 	 */
-	private final int BROADCAST_TIME = 30;
+	private final int BROADCAST_TIME = 60;
 
 	// from BitNymWrapper
 	/**
@@ -102,6 +104,7 @@ public class BitNymWallet {
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
 		mixListeners = new ArrayList<MixingEventListener>();
+		waitForDataListeners = new ArrayList<WaitForDataListener>();
 
 		//ptp = new PTP(System.getProperty("user.dir"), 9051, 9050);
 		restartPTP();
@@ -156,6 +159,7 @@ public class BitNymWallet {
 		log.info("this is the current proof chain");
 		pm = new ProofMessage();
 		log.info(pm.toString());
+		System.out.println("DEBUG: Proofmessage: " + pm.toString());
 //		try {
 //			PrintWriter out = new PrintWriter("prooftextfile2.txt");
 //			out.println(pm.toString());
@@ -273,6 +277,14 @@ public class BitNymWallet {
 		tg = new TransactionGenerator(context, pg, wallet, bc);
 		
 		m = new Mixer(this, pm, wallet, context, pg, bc);
+
+		m.addWaitForDataListener(new WaitForDataListener() {
+			@Override
+			public void waitForData(boolean status) {
+				for(WaitForDataListener listener : waitForDataListeners)
+					listener.waitForData(status);
+			}
+		});
 		
 		crv = new ChallengeResponseVerifier(this, wallet, params, pg, bc);
 
@@ -455,8 +467,15 @@ public class BitNymWallet {
 
 	private void reinitMixer() {
 		stopListeningForMix();
-		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
 		m = new Mixer(this, pm, wallet, context, pg, bc);
+		m.addWaitForDataListener(new WaitForDataListener() {
+			@Override
+			public void waitForData(boolean status) {
+				for (WaitForDataListener listener : waitForDataListeners) {
+					listener.waitForData(status);
+				}
+			}
+		});
 	}
 
 	// Timeout to abort mixing after a certain time
@@ -496,6 +515,10 @@ public class BitNymWallet {
 	 */
 	private void mixAborted(int errorCode) {
 		// remove old mixer and create new one after abort event (removes listeners, state etc)
+		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
+		removeTransactionGeneratorListener(tgListener);
+		// avoid using old bc on timeout (maybe TODO this only on timeout
+		getBroadcastAnnouncements().clear();
 		reinitMixer();
 		listenerAdded = false;
 		stopTimeout = true;
@@ -508,6 +531,7 @@ public class BitNymWallet {
 		// stop mixing again
 		stopListeningForMix();
 		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
+		removeTransactionGeneratorListener(tgListener);
 		stopTimeout = true;
 		for (MixingEventListener listener : mixListeners) {
 			listener.onMixFinished();
@@ -551,45 +575,8 @@ public class BitNymWallet {
 					mixAborted(errorCode);
 				}
 			});
-
-			// check if mixing is possible every time a new broadcast is received
-
-			broadcastListener = new BroadcastAnnouncementChangeEventListener() {
-				@Override
-				public void onBroadcastAnnouncementChanged() {
-					System.out.println("DEBUG: BroadcastAnnouncementChange Received");
-					// Remove old broadcasts (older than four minutes)
-					System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
-					Set<Transaction> to_remove = new HashSet<Transaction>();
-					for (Transaction t : getBroadcastAnnouncements()) {
-						// Locktime is interpreted as the time when the broadcast has been created
-						if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
-							to_remove.add(t);
-						}
-					}
-					getBroadcastAnnouncements().removeAll(to_remove);
-					System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
-
-					if (getBroadcastAnnouncements().isEmpty()) {
-						// do nothing
-					} else {
-						// There are broadcasts, mix with one of them
-						try {
-							System.out.println("Trying to mix with broadcast");
-							mixWithNewestBroadcast(lockTime);
-							// Remove all stored broadcasts since one of them has been used
-							getBroadcastAnnouncements().clear();
-						} catch (NoBroadcastAnnouncementsException e1) {
-							// Should not happen
-							e1.printStackTrace();
-						}
-					}
-
-				}
-			};
-			this.addBroadcastAnnouncementChangeEventListener(broadcastListener);
-			listenerAdded = true;
 		}
+		listenerAdded = true;
 		// Remove old broadcasts (older than four minutes)
 		System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
 		System.out.println("Wait random time to receive broadcasts before sending own.");
@@ -614,6 +601,65 @@ public class BitNymWallet {
 			// check what time broadcast would have
 			long bcTime = (CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
 			System.out.println("Broadcast is " + bcTime + " old");
+
+
+			// add listener for tg, so mix can be initiated only after own broadcast was successfully wrote to file
+			tgListener = new TransactionGeneratorListener() {
+				@Override
+				public void onTransactionWroteToFile() {
+					System.out.println("DEBUG: onTransactionWroteToFile called");
+					// check if mixing is possible every time a new broadcast is received
+					broadcastListener = new BroadcastAnnouncementChangeEventListener() {
+						@Override
+						public void onBroadcastAnnouncementChanged() {
+							System.out.println("DEBUG: BroadcastAnnouncementChange Received");
+							// Remove old broadcasts (older than four minutes)
+							System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
+							Set<Transaction> to_remove = new HashSet<Transaction>();
+							for (Transaction t : getBroadcastAnnouncements()) {
+								// Locktime is interpreted as the time when the broadcast has been created
+								if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
+									to_remove.add(t);
+								}
+							}
+							getBroadcastAnnouncements().removeAll(to_remove);
+							System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
+
+							if (getBroadcastAnnouncements().isEmpty()) {
+								// do nothing
+							} else {
+								// There are broadcasts, mix with one of them
+								try {
+									System.out.println("Trying to mix with broadcast");
+									mixWithNewestBroadcast(lockTime);
+									// Remove all stored broadcasts since one of them has been used
+									getBroadcastAnnouncements().clear();
+								} catch (NoBroadcastAnnouncementsException e1) {
+									// Should not happen
+									e1.printStackTrace();
+								}
+							}
+
+						}
+					};
+					addBroadcastAnnouncementChangeEventListener(broadcastListener);
+					//check if broadcast
+					System.out.println("DEBUG: check for BCs");
+					if(!getBroadcastAnnouncements().isEmpty()) {
+						System.out.println("BroadCast found, try mixing");
+						try {
+							mixWithNewestBroadcast(lockTime);
+							// Remove all stored broadcasts since one of them has been used
+							getBroadcastAnnouncements().clear();
+						} catch (NoBroadcastAnnouncementsException e1) {
+							// Should not happen
+							e1.printStackTrace();
+						}
+					}
+				}
+			};
+			addTransactionGeneratorListener(tgListener);
+
 			sendBroadcastAnnouncement(0);
 			if (bcTime < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
 				System.out.println("Broadcast would be too old. Send new one");
@@ -635,6 +681,45 @@ public class BitNymWallet {
 	public void mixWith(BroadcastAnnouncement ba) {
 		
 	}*/
+
+	private void listenToBroadcasts(int lockTime) {
+		// check if mixing is possible every time a new broadcast is received
+		broadcastListener = new BroadcastAnnouncementChangeEventListener() {
+			@Override
+			public void onBroadcastAnnouncementChanged() {
+				System.out.println("DEBUG: BroadcastAnnouncementChange Received");
+				// Remove old broadcasts (older than four minutes)
+				System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
+				Set<Transaction> to_remove = new HashSet<Transaction>();
+				for (Transaction t : getBroadcastAnnouncements()) {
+					// Locktime is interpreted as the time when the broadcast has been created
+					if (t.getLockTime() < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
+						to_remove.add(t);
+					}
+				}
+				getBroadcastAnnouncements().removeAll(to_remove);
+				System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
+
+				if (getBroadcastAnnouncements().isEmpty()) {
+					// do nothing
+				} else {
+					// There are broadcasts, mix with one of them
+					try {
+						System.out.println("Trying to mix with broadcast");
+						mixWithNewestBroadcast(lockTime);
+						// Remove all stored broadcasts since one of them has been used
+						getBroadcastAnnouncements().clear();
+					} catch (NoBroadcastAnnouncementsException e1) {
+						// Should not happen
+						e1.printStackTrace();
+					}
+				}
+
+			}
+		};
+		addBroadcastAnnouncementChangeEventListener(broadcastListener);
+		listenerAdded = true;
+	}
 	
 	public String getProofMessageString() {
 		return this.pm.toString();
@@ -667,6 +752,10 @@ public class BitNymWallet {
 	public void addBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener listener) {
 		mpd.addBroadcastAnnouncementChangeEventListener(listener);
 	}
+
+	public void addTransactionGeneratorListener(TransactionGeneratorListener listener) {
+		tg.addTransactionGeneratorListener(listener);
+	}
 	
 	public void addMixFinishedEventListener(MixFinishedEventListener listener) {
 		m.addMixFinishedEventListener(listener);
@@ -677,6 +766,8 @@ public class BitNymWallet {
 	public void addMixPassiveEventListener(MixStartedEventListener listener) {m.addMixPassiveEventListener(listener);}
 
 	public void addMixingEventListener(MixingEventListener listener) {mixListeners.add(listener);}
+
+	public void addWaitForDataListener(WaitForDataListener listener) {waitForDataListeners.add(listener);}
 	
 	public void removeProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
 		pm.removeProofConfidenceChangeEventListener(listener);
@@ -689,9 +780,17 @@ public class BitNymWallet {
 	}
 	
 	public void removeBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener listener) {
-		mpd.removeBroadcastAnnouncementChangeEventListener(listener);
+		if(listener != null) {
+			mpd.removeBroadcastAnnouncementChangeEventListener(listener);
+		}
 	}
-	
+
+	public void removeTransactionGeneratorListener(TransactionGeneratorListener listener) {
+		if(listener != null) {
+			tg.removeTransactionGeneratorListener(listener);
+		}
+	}
+
 	public void removeMixFinishedEventListener(MixFinishedEventListener listener) {
 		m.removeMixFinishedEventListener(listener);
 	}
@@ -798,6 +897,14 @@ public class BitNymWallet {
 		Context.propagate(context);
 		try (ByteArrayInputStream bis = new ByteArrayInputStream(proof); ObjectInput in = new ObjectInputStream(bis)) {
 			ProofMessage other_pm = (ProofMessage) in.readObject();
+			other_pm.addWaitForDataListener(new WaitForDataListener() {
+				@Override
+				public void waitForData(boolean status) {
+					for(WaitForDataListener listener : waitForDataListeners) {
+						listener.waitForData(status);
+					}
+				}
+			});
 			if (!other_pm.isProbablyValid(MainClass.params, bc, pg)) {
 				System.out.println("DEBUG BitWallet: other_pm is probably invalid");
 				return null;

@@ -7,6 +7,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -40,6 +41,8 @@ public class Mixer {
 	private int lockTime;
 	private boolean successful;
 	private long mixRequestTimestamp = 0;
+
+	private List<WaitForDataListener> waitForDataListeners;
 	/**
 	 * True if currently mixing, false otherwise. Used to avoid mixing more than once at a time
 	 */
@@ -59,6 +62,7 @@ public class Mixer {
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
 		this.maListeners = new ArrayList<MixAbortEventListener>();
 		this.mpListeners = new ArrayList<MixStartedEventListener>();
+		this.waitForDataListeners = new ArrayList<WaitForDataListener>();
 		this.lockTime = 0; 
 	}
 	
@@ -76,6 +80,7 @@ public class Mixer {
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
 		this.maListeners = new ArrayList<MixAbortEventListener>();
 		this.mpListeners = new ArrayList<MixStartedEventListener>();
+		this.waitForDataListeners = new ArrayList<WaitForDataListener>();
 		this.lockTime = 0;
 
 	}
@@ -92,6 +97,7 @@ public class Mixer {
 		this.mfListeners = new ArrayList<MixFinishedEventListener>();
 		this.maListeners = new ArrayList<MixAbortEventListener>();
 		this.mpListeners = new ArrayList<MixStartedEventListener>();
+		this.waitForDataListeners = new ArrayList<WaitForDataListener>();
 		this.lockTime = 0;
 	}
 	
@@ -127,9 +133,16 @@ public class Mixer {
 		//received serialized proof, so deserialize, and check proof
 		System.out.println("check partner proof");
 		this.partnerProof = (ProofMessage) deserialize(arg0);
+		partnerProof.addWaitForDataListener(new WaitForDataListener() {
+			@Override
+			public void waitForData(boolean status) {
+				for(WaitForDataListener listener : waitForDataListeners) {
+					listener.waitForData(status);
+				}
+			}
+		});
 		if(!partnerProof.isProbablyValid(params, bc, pg)) { //TODO is it possible that invalid is returned although it should be valid?
 			System.out.println("proof of mix partner is invalid");
-			sendAbort(mixPartnerAdress);
 			mixAbort(5);
 			return;
 		}
@@ -147,7 +160,6 @@ public class Mixer {
 				if(!checkTxInputIsFromProof(rcvdTx, 0)) {
 					System.out.println("checktxinput is from proof failed");
 					mixAbort(5);
-					sendAbort(mixPartnerAdress);
 					return;
 				}
 				final int outputOrder = rcvdTx.getOutputs().size();
@@ -181,12 +193,19 @@ public class Mixer {
 							Transaction lastTxVersion = deserializeTransaction(msg.data);
 							if(!checkTx(rcvdTx, lastTxVersion)) {
 								System.out.println("checktx failed");
+								//mixAbort(5);
 								//return;
 							}
-							lastTxVersion.getInput(1).setScriptSig(inSp.calculateSigScript(lastTxVersion, 1, w));
-							lastTxVersion.getInput(1).verify(ownProof.getLastTransactionOutput());
-							assert(lastTxVersion != null);
-							broadcastMixTx(outputOrder, outSp,lastTxVersion, 1);							
+							try {
+								lastTxVersion.getInput(1).setScriptSig(inSp.calculateSigScript(lastTxVersion, 1, w));
+								lastTxVersion.getInput(1).verify(ownProof.getLastTransactionOutput());
+								assert (lastTxVersion != null);
+								broadcastMixTx(outputOrder, outSp, lastTxVersion, 1);
+							} catch (ScriptException e) {
+								e.printStackTrace();
+								mixAbort(5);
+								return;
+							}
 						}
 					});
 					wallet.sendMessage(new SendProofMessage(rcvdTx.bitcoinSerialize()), mixPartnerAdress);
@@ -199,7 +218,14 @@ public class Mixer {
 					//sign input and send back for signing
 
 					rcvdTx.getInput(1).setScriptSig(inSp.calculateSigScript(rcvdTx, 1, w));
-					rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
+					try {
+						rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
+					} catch(ScriptException e) {
+						e.printStackTrace();
+						mixAbort(5);
+						return;
+					}
+
 					
 					//rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					System.out.println("listen for complete mix transaction. other started");
@@ -211,6 +237,7 @@ public class Mixer {
 							// TODO Auto-generated method stub
 							if(!checkTx(rcvdTx, deserializeTransaction(msg.data))) {
 								System.out.println("checktx failed");
+								//mixAbort(5);
 								//return;
 							}
 							commitRcvdFinalTx(outSp, msg.data, 1, outputOrder);
@@ -229,6 +256,8 @@ public class Mixer {
 
 
 		});
+		System.out.println("New Tx:");
+		System.out.println(ownProof.getLastTransaction());
 		this.wallet.sendMessage(new SendProofMessage(serialize(ownProof)), mixPartnerAdress);
 		//this.wallet.sendMessage(serialize(ownProof), mixPartnerAdress);
 		System.out.println("done");
@@ -294,6 +323,8 @@ public class Mixer {
 		byte[] serializedProof = null;
 		
 		serializedProof = serialize(this.ownProof);
+		System.out.println("New Tx");
+		System.out.println(ownProof.getLastTransaction());
 		
 		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
 		//ping();
@@ -305,12 +336,19 @@ public class Mixer {
 			public void messageReceived(SendProofMessage msg, Identifier arg1) {
 				System.out.println("Mix active, first message received, try starting challenge response");
 				partnerProof = (ProofMessage) deserialize(msg.data);
+				partnerProof.addWaitForDataListener(new WaitForDataListener() {
+					@Override
+					public void waitForData(boolean status) {
+						for(WaitForDataListener listener : waitForDataListeners) {
+							listener.waitForData(status);
+						}
+					}
+				});
 				//check proof
 				System.out.println("check partner proof");
 				if(!partnerProof.isProbablyValid(params, bc, pg)) {
 					System.out.println("proof of mix partner is invalid, abort");
 					mixAbort(5);
-					sendAbort(mixPartnerAdress);
 					return;
 				}
 				challengeResponse();
@@ -357,6 +395,10 @@ public class Mixer {
 	}
 	private void mixAbort(int errorCode) {
 		mixing = false;
+		// inform mixpartner about abort
+		if(errorCode == 5) {
+			sendAbort(mixPartnerAdress);
+		}
 		for (MixAbortEventListener listener : maListeners) {
 			listener.onMixAborted(errorCode);
 		}
@@ -458,6 +500,7 @@ public class Mixer {
 				mixPartnerAdress = source;
 				mixing = true;
 				mixStarted();
+				System.out.println("Mixing passive with " + mixPartnerAdress.getTorAddress());
 				passiveMix(mixRequestMessage.data);
 			}
 		});
@@ -594,7 +637,6 @@ public class Mixer {
 					} catch (Exception e) {
 						e.printStackTrace();
 						mixAbort(5);
-						sendAbort(mixPartnerAdress);
 						return;
 					}
 					//this method just does rudimentary checks, does not check whether inputs are already spent for example
@@ -651,7 +693,6 @@ public class Mixer {
 					} catch (Exception e) {
 						e.printStackTrace();
 						mixAbort(5);
-						sendAbort(mixPartnerAdress);
 						return;
 					}
 				}
@@ -831,6 +872,7 @@ public class Mixer {
 		return maListeners;
 	}
 
+	public void addWaitForDataListener(WaitForDataListener listener) {waitForDataListeners.add(listener);}
 
 	public void setLockTime(int lockTime) {
 		this.lockTime = lockTime;		

@@ -2,6 +2,7 @@ package bitnymWallet;
 import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -31,6 +32,8 @@ public class TransactionGenerator {
 
 	private Context context;
 
+	private List<TransactionGeneratorListener> listeners;
+
 
 	public TransactionGenerator(Context context, PeerGroup pg, Wallet w, BlockChain bc) {
 		this.context = context;
@@ -38,6 +41,7 @@ public class TransactionGenerator {
 		this.pg = pg;
 		this.w = w;
 		this.bc = bc;
+		listeners = new LinkedList<TransactionGeneratorListener>();
 		
 	}
 	
@@ -161,6 +165,7 @@ public class TransactionGenerator {
 		}
 		
 		TransactionBroadcast broadcast = pg.broadcastTransaction(tx);
+		System.out.println("New Tx" + tx.toString());
 		broadcast.setProgressCallback(new ProgressCallback() {
 
 			@Override
@@ -170,12 +175,23 @@ public class TransactionGenerator {
 					pm.addTransaction(tx, 0, sp);
 					pm.writeToFile();
 					System.out.println("save broadcast announcement to file");
+					for (TransactionGeneratorListener l : listeners) {
+						l.onTransactionWroteToFile();
+					}
 				}
 			}
 		});
 		
 		
 
+	}
+
+	public void addTransactionGeneratorListener(TransactionGeneratorListener l) {
+		this.listeners.add(l);
+	}
+
+	public void removeTransactionGeneratorListener(TransactionGeneratorListener l) {
+		this.listeners.remove(l);
 	}
 	
 	private Coin estimateBroadcastFee() {
