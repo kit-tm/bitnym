@@ -264,6 +264,9 @@ public class Mixer {
 	}
 	
 	private boolean checkTxInputIsFromProof(Transaction rcvdTx, int i) {
+		if (rcvdTx == null) {
+			return false;
+		}
 		//return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
 		// TODO sometimes index i is too high (1, but array size of rcvdTx only 1)
 		try {
