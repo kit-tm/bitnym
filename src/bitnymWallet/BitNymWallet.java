@@ -201,7 +201,7 @@ public class BitNymWallet {
 			System.exit(52);
 		}
 		// 2 peers are enough
-		pg.setMaxConnections(2);
+		pg.setMaxConnections(5);
 
 		/*
 		// TODO(SF): Remove failing peers
@@ -482,10 +482,9 @@ public class BitNymWallet {
 		Thread thread = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				System.out.println("DEBUG: Timeout started");
 				stopTimeout = false;
 				int timeout = 4 * 60;
-				while (timeout > 0 && stopTimeout == false) {
+				while (timeout > 0 && !stopTimeout) {
 					try {
 						Thread.sleep(1000);
 					} catch (InterruptedException e) {
@@ -517,8 +516,10 @@ public class BitNymWallet {
 		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
 		broadcastListener = null;
 		removeTransactionGeneratorListener(tgListener);
-		// avoid using old bc on timeout (maybe TODO this only on timeout
-		getBroadcastAnnouncements().clear();
+		// avoid using old bc on timeout
+		if(errorCode == 0) {
+			getBroadcastAnnouncements().clear();
+		}
 		reinitMixer();
 		listenerAdded = false;
 		stopTimeout = true;
@@ -597,7 +598,6 @@ public class BitNymWallet {
 		System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
 
 		if (getBroadcastAnnouncements().isEmpty()) {
-			// Send a broadcast ourself
 			// check what time broadcast would have
 			long bcTime = (CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
 			System.out.println("Broadcast is " + bcTime + " old");
@@ -607,13 +607,11 @@ public class BitNymWallet {
 			tgListener = new TransactionGeneratorListener() {
 				@Override
 				public void onTransactionWroteToFile() {
-					System.out.println("DEBUG: onTransactionWroteToFile called");
 					// check if mixing is possible every time a new broadcast is received
 					listenToBroadcasts(lockTime);
 					//check if broadcast
-					System.out.println("DEBUG: check for BCs");
 					if (!getBroadcastAnnouncements().isEmpty()) {
-						System.out.println("BroadCast found, try mixing");
+						System.out.println("Broadcast found, try mixing");
 						try {
 							mixWithNewestBroadcast(lockTime);
 							// Remove all stored broadcasts since one of them has been used
@@ -627,6 +625,7 @@ public class BitNymWallet {
 			};
 			addTransactionGeneratorListener(tgListener);
 
+			// Send a broadcast ourself
 			sendBroadcastAnnouncement(0);
 			if (bcTime < (System.currentTimeMillis() / 1000) - (BROADCAST_TIME * 60)) {
 				System.out.println("Broadcast would be too old. Send new one");

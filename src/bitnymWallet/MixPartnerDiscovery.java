@@ -1,9 +1,7 @@
 package bitnymWallet;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import javax.annotation.Nullable;
@@ -34,6 +32,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	private List<Transaction> broadcasts;
 	private Wallet wallet;
 	private List<BroadcastAnnouncementChangeEventListener> listeners;
+	public Transaction lastReceived;
 
 	public MixPartnerDiscovery(NetworkParameters params, PeerGroup pg, BlockChain bc, Wallet wallet) {
 		this.pg = pg;
@@ -117,11 +116,20 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	@Override
 	public void onBlocksDownloaded(Peer arg0, Block arg1,
 			@Nullable FilteredBlock arg2, int arg3) {
-		System.out.println("received block");
+		System.out.println("received block: " + arg2.getBlockHeader().getHashAsString());
+		System.out.println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date()));
+
+		arg2.getTransactionCount();
+		String hashes = "DEBUG: Hashes";
+		for (Sha256Hash hash : arg2.getTransactionHashes()) {
+			hashes = hashes + ", " + hash.toString();
+		}
+		System.out.println(hashes);
 		boolean receivedBcastAnnouncmnt = false;
 		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 		for(Transaction tx : assocTxs.values()) {
-			System.out.println("from within mixpartner discovery " + tx);			
+			System.out.println("from within mixpartner discovery " + tx);
+			lastReceived = tx;
 			if(tx.getOutputs().size() > 1 &&
 					BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(1).getScriptBytes()))
 					//&& !wallet.isTransactionRelevant(tx)) {
@@ -168,7 +176,9 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	}
 	
 	public void removeBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener l) {
+		System.out.println("DEBUG: Remove BCListners. Current size:" + listeners.size());
 		this.listeners.remove(l);
+		System.out.println("DEBUG: Size now: " + listeners.size());
 	}
 
 	public BroadcastAnnouncement getNewestBroadcast() throws NoBroadcastAnnouncementsException {

@@ -14,22 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
 
-import org.bitcoinj.core.BitcoinSerializer;
-import org.bitcoinj.core.Block;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.BloomFilter;
-import org.bitcoinj.core.FilteredBlock;
-import org.bitcoinj.core.GetDataMessage;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.PartialMerkleTree;
-import org.bitcoinj.core.Peer;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.ProtocolException;
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.Utils;
+import org.bitcoinj.core.*;
 import org.bitcoinj.core.TransactionConfidence.ConfidenceType;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionOutput;
@@ -143,8 +128,14 @@ public class ProofMessage implements Serializable {
 	public boolean isValidPath() {
 		//check that the transaction build a path and are not just random txs, 
 		//by checking the tx hashes with those of the outpoints
+		System.out.println("DEBUG PATH:");
+		for (Transaction tx : validationPath) {
+			System.out.println("TX: " + tx.getHash().toString());
+		}
 		for(int i=validationPath.size()-1; i > 1; i--) {
 			Transaction tx = validationPath.get(i);
+			System.out.println("DEBUG: output is " + tx.getInput(outputIndices.get(i)).getOutpoint().getHash());
+			System.out.println("DEBUG: Validationpath is " + validationPath.get(i-1).getHash());
 			if(!tx.getInput(outputIndices.get(i)).getOutpoint().getHash().equals(validationPath.get(i-1).getHash())) {
 				System.out.println("not a valid path!");
 				return false;
@@ -223,63 +214,77 @@ public class ProofMessage implements Serializable {
 		//get filtered block with transaction and check merkel tree
 		final BlockStore blockstore = bc.getBlockStore();
 		System.out.println("check that transaction is in blockchain");
+		System.out.println("DEBUG: Last TX: " + getLastTransaction());
 		final Peer dpeer = pg.getDownloadPeer();
-		BloomFilter filter = dpeer.getBloomFilter();
+		System.out.println("Download peer: " + dpeer.toString());
+		System.out.println("Peers connected : " + pg.getConnectedPeers().size());
 
-		filter.insert(getLastTransaction().getInput(0).getOutpoint().unsafeBitcoinSerialize());
 
-		dpeer.setBloomFilter(filter);
-		GetDataMessage msg = new GetDataMessage(params);
-		assert(appearedInChainheight > 0);
-		msg.addFilteredBlock(getBlockHashByHeight(bc, appearedInChainheight));
 		final Object monitor = new Object();
 		//listener forces monitorstate to be final, so we use a wrapper class, to still be able to modify it
 		class BooleanWrapper {
 			boolean monitorState = false;
-			
+
 			void setMonitorState(boolean b) {
 				this.monitorState = b;
 			}
-			
+
 			boolean getMonitorState() {
 				return this.monitorState;
 			}
 		}
 		final BooleanWrapper monState = new BooleanWrapper();
 		final BooleanWrapper isTxInBlockchain = new BooleanWrapper();
-		dpeer.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
-			
-			@Override
-			public void onBlocksDownloaded(Peer arg0, Block arg1,
-					@Nullable FilteredBlock arg2, int arg3) {
-				System.out.println("execute onblocksdownloaded listener on block + " + arg2.getBlockHeader().getHashAsString());
-				List<Sha256Hash> matchedHashesOut = new ArrayList<>();
-				PartialMerkleTree tree = arg2.getPartialMerkleTree();
-				Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
-				System.out.println("DEBUG: merkleroot:" + merkleroot.toString());
-				try {
-					System.out.println("DEBUG: Hashes: " + matchedHashesOut.contains(getLastTransaction().getHash()));
-					System.out.println("DEBUG: merkleroot blockHeader " + merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()));
-					System.out.println("DEBUG: merkleroot blockstore" + merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot()));
-					if(matchedHashesOut.contains(getLastTransaction().getHash()) &&
-							merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()) &&
-							merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
-						System.out.println("DEBUG: isTxInBlockchain TRUE");
-						isTxInBlockchain.setMonitorState(true);
+		GetDataMessage msg = new GetDataMessage(params);
+		assert(appearedInChainheight > 0);
+		msg.addFilteredBlock(getBlockHashByHeight(bc, appearedInChainheight));
+		System.out.println("Block requested: " + getBlockHashByHeight(bc, appearedInChainheight));
+		for(Peer peer : pg.getConnectedPeers()) {
+			BloomFilter filter = peer.getBloomFilter();
+
+			filter.insert(getLastTransaction().getInput(0).getOutpoint().unsafeBitcoinSerialize());
+
+			peer.setBloomFilter(filter);
+
+			peer.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
+
+				@Override
+				public void onBlocksDownloaded(Peer arg0, Block arg1,
+											   @Nullable FilteredBlock arg2, int arg3) {
+					System.out.println("Peer: " + arg0.toString());
+					System.out.println("execute onblocksdownloaded listener on block + " + arg2.getBlockHeader().getHashAsString());
+					List<Sha256Hash> matchedHashesOut = new ArrayList<>();
+					PartialMerkleTree tree = arg2.getPartialMerkleTree();
+					Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
+					System.out.println("DEBUG: merkleroot:" + merkleroot.toString());
+					if (!matchedHashesOut.isEmpty()) {
+						System.out.println(matchedHashesOut.get(0));
 					}
-				} catch (BlockStoreException e) {
-					e.printStackTrace();
+					try {
+						System.out.println("DEBUG: Hashes: " + matchedHashesOut.contains(getLastTransaction().getHash()));
+						System.out.println("Hashes should contain " + getLastTransaction().getHash());
+						System.out.println("DEBUG: merkleroot blockHeader " + merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()));
+						System.out.println("DEBUG: merkleroot blockstore" + merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot()));
+						if(matchedHashesOut.contains(getLastTransaction().getHash()) &&
+								merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()) &&
+								merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
+							System.out.println("DEBUG: isTxInBlockchain TRUE");
+							isTxInBlockchain.setMonitorState(true);
+						}
+					} catch (BlockStoreException e) {
+						e.printStackTrace();
+					}
+
+					synchronized (monitor) {
+						monState.setMonitorState(false);
+						System.out.println("DEBUG: isTxInBlockchain Finished!");
+						monitor.notifyAll(); // unlock again
+					}
+					peer.removeBlocksDownloadedEventListener(this);
 				}
-				
-				synchronized (monitor) {
-					monState.setMonitorState(false);
-					System.out.println("DEBUG: isTxInBlockchain Finished!");
-					monitor.notifyAll(); // unlock again
-				}
-				dpeer.removeBlocksDownloadedEventListener(this);
-			}
-		});
-		dpeer.sendMessage(msg);
+			});
+			peer.sendMessage(msg);
+		}
 		System.out.println("send getdatamessage to verify tx is in blockchain");
 		waitForData(true);
 		//return when finished

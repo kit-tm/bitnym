@@ -152,7 +152,6 @@ public class Mixer {
 
 			@Override
 			public void messageReceived(SendProofMessage msg, Identifier arg1) {
-				System.out.println("DEBUG: Passive Mix, first part of mix received");
 				//deserialize received tx, and add own input and output and
 				//sign then and send back
 				System.out.println("try to deserialize tx received from mixpartner");
@@ -233,7 +232,6 @@ public class Mixer {
 						
 						@Override
 						public void messageReceived(SendProofMessage msg, Identifier arg1) {
-							System.out.println("Passive, last message received. Check and restart ptp");
 							// TODO Auto-generated method stub
 							if(!checkTx(rcvdTx, deserializeTransaction(msg.data))) {
 								System.out.println("checktx failed");
@@ -259,7 +257,6 @@ public class Mixer {
 		System.out.println("New Tx:");
 		System.out.println(ownProof.getLastTransaction());
 		this.wallet.sendMessage(new SendProofMessage(serialize(ownProof)), mixPartnerAdress);
-		//this.wallet.sendMessage(serialize(ownProof), mixPartnerAdress);
 		System.out.println("done");
 	}
 	
@@ -271,7 +268,7 @@ public class Mixer {
 		// TODO sometimes index i is too high (1, but array size of rcvdTx only 1)
 		try {
 			System.out.println("DEBUG: transaction for comparison " + rcvdTx.getInput(i).getOutpoint().toString() + "(" + rcvdTx.getInput(i).getOutpoint().getHash() + ")");
-			System.out.println("DEBUG: last transaction of parnter " + partnerProof.getLastTransaction().toString() + "(" + partnerProof.getLastTransaction().getHash() + ")");
+			System.out.println("DEBUG: last transaction of partner " + partnerProof.getLastTransaction().toString() + "(" + partnerProof.getLastTransaction().getHash() + ")");
 			System.out.println("DEBUG: Index 1(Partner): " + partnerProof.getLastTransactionOutput().getIndex() + ", Index 2(TX): " + rcvdTx.getInput(i).getOutpoint().getIndex());
 			return rcvdTx.getInput(i).getOutpoint().getHash().equals(partnerProof.getLastTransaction().getHash()) &&
 					partnerProof.getLastTransactionOutput().getIndex() == rcvdTx.getInput(i).getOutpoint().getIndex();
@@ -285,7 +282,7 @@ public class Mixer {
 	
 	public void initiateMix() {
 		if (mixing) {
-			// already mixing , do not initiatemix
+			// already mixing , do not initiate mix
 			System.out.println("already mixing! Can't mix active");
 			return;
 		}
@@ -329,7 +326,7 @@ public class Mixer {
 		System.out.println("New Tx");
 		System.out.println(ownProof.getLastTransaction());
 		
-		System.out.println("mixpartneradress " + mixPartnerAdress.getTorAddress());
+		System.out.println("mixpartner address " + mixPartnerAdress.getTorAddress());
 		//ping();
 		System.out.println("listen for proof (first message of mix(?))");
 		this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
@@ -337,7 +334,6 @@ public class Mixer {
 			//deserialize proof
 			@Override
 			public void messageReceived(SendProofMessage msg, Identifier arg1) {
-				System.out.println("Mix active, first message received, try starting challenge response");
 				partnerProof = (ProofMessage) deserialize(msg.data);
 				partnerProof.addWaitForDataListener(new WaitForDataListener() {
 					@Override
@@ -471,15 +467,8 @@ public class Mixer {
 				System.out.println("Mix request received, mixing passive");
 				if (mixing) {
 					// mixing active, do not mix passive
-					System.out.println("Already mixing, can't mix passive");
-					System.out.println("Check if simultaneously mixing active");
+					System.out.println("Already mixing, can't mix passive. Check if simultaneously mixing active");
 					if (mixPartnerAdress.equals(source)) {
-						// necessary to check if mixing active?
-						System.out.println("Assertion: simultaneously mixing active");
-						System.out.println("Check who would have been first:");
-						System.out.println(mixRequestMessage.timeStamp);
-						System.out.println(mixRequestTimestamp);
-						System.out.println(mixRequestMessage.timeStamp - mixRequestTimestamp);
 						if (mixRequestTimestamp != 0) {
 							if(mixRequestTimestamp == mixRequestMessage.timeStamp) {
 								// abort
@@ -489,14 +478,12 @@ public class Mixer {
 							}
 							if (mixRequestMessage.timeStamp > mixRequestTimestamp) {
 								//own Request was faster mix active, other should have same result and mix passive
-								System.out.println("Would stay active");
-								//mixAbort(11);
+								System.out.println("stay active");
 								return;
 							}
 						}
-						System.out.println("Would be passive");
+						System.out.println("mix passive");
 						passiveMix(mixRequestMessage.data);
-						//mixAbort(11);
 					}
 					return;
 				}
@@ -724,8 +711,8 @@ public class Mixer {
 		Transaction rcvdTx = null;
 		BitcoinSerializer bs = new BitcoinSerializer(params, false);
 		try {
-			rcvdTx = bs.makeTransaction(arg0);			
-		} catch (ProtocolException e) {
+			rcvdTx = bs.makeTransaction(arg0);
+		} catch (ProtocolException | NegativeArraySizeException e) {
 			e.printStackTrace();
 		}
 		return rcvdTx;
