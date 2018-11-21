@@ -335,14 +335,6 @@ public class Mixer {
 			@Override
 			public void messageReceived(SendProofMessage msg, Identifier arg1) {
 				partnerProof = (ProofMessage) deserialize(msg.data);
-				partnerProof.addWaitForDataListener(new WaitForDataListener() {
-					@Override
-					public void waitForData(boolean status) {
-						for(WaitForDataListener listener : waitForDataListeners) {
-							listener.waitForData(status);
-						}
-					}
-				});
 				//check proof
 				System.out.println("check partner proof");
 				if(!partnerProof.isProbablyValid(params, bc, pg)) {

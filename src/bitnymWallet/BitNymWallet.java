@@ -277,7 +277,7 @@ public class BitNymWallet {
 		
 		m = new Mixer(this, pm, wallet, context, pg, bc);
 
-		m.addWaitForDataListener(new WaitForDataListener() {
+		pm.addWaitForDataListener(new WaitForDataListener() {
 			@Override
 			public void waitForData(boolean status) {
 				for(WaitForDataListener listener : waitForDataListeners)
