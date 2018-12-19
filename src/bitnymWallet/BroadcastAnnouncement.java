@@ -26,7 +26,7 @@ public class BroadcastAnnouncement {
 	}
 
 	public static boolean isBroadcastAnnouncementScript(byte[] script) {
-		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(script));
+		//System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(script));
 		//TODO expand this to full verification, e.g. parsing the script
 		if(script[1] != 0x04) {
 			return false;
