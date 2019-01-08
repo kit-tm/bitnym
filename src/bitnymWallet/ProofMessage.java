@@ -249,12 +249,12 @@ public class ProofMessage implements Serializable {
 			peer.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
 
 				@Override
-				public void onBlocksDownloaded(Peer arg0, Block arg1,
-											   @Nullable FilteredBlock arg2, int arg3) {
-					System.out.println("Peer: " + arg0.toString());
-					System.out.println("execute onblocksdownloaded listener on block + " + arg2.getBlockHeader().getHashAsString());
+				public void onBlocksDownloaded(Peer peer, Block block,
+											   @Nullable FilteredBlock filteredBlock, int blocksLeft) {
+					System.out.println("Peer: " + peer.toString());
+					System.out.println("execute onblocksdownloaded listener on block + " + filteredBlock.getBlockHeader().getHashAsString());
 					List<Sha256Hash> matchedHashesOut = new ArrayList<>();
-					PartialMerkleTree tree = arg2.getPartialMerkleTree();
+					PartialMerkleTree tree = filteredBlock.getPartialMerkleTree();
 					Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
 					System.out.println("DEBUG: merkleroot:" + merkleroot.toString());
 					if (!matchedHashesOut.isEmpty()) {
@@ -263,11 +263,12 @@ public class ProofMessage implements Serializable {
 					try {
 						System.out.println("DEBUG: Hashes: " + matchedHashesOut.contains(getLastTransaction().getHash()));
 						System.out.println("Hashes should contain " + getLastTransaction().getHash());
-						System.out.println("DEBUG: merkleroot blockHeader " + merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()));
-						System.out.println("DEBUG: merkleroot blockstore" + merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot()));
+						System.out.println("DEBUG: merkleroot blockHeader " + merkleroot.equals(filteredBlock.getBlockHeader().getMerkleRoot()));
+						System.out.println("DEBUG: merkleroot blockstore" + merkleroot.equals(blockstore.get(filteredBlock.getBlockHeader().getHash()).getHeader().getMerkleRoot()));
+						System.out.println("DEBUG: blocksLeft is " + blocksLeft);
 						if(matchedHashesOut.contains(getLastTransaction().getHash()) &&
-								merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()) &&
-								merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
+								merkleroot.equals(filteredBlock.getBlockHeader().getMerkleRoot()) &&
+								merkleroot.equals(blockstore.get(filteredBlock.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
 							System.out.println("DEBUG: isTxInBlockchain TRUE");
 							isTxInBlockchain.setMonitorState(true);
 						}
@@ -357,11 +358,11 @@ public class ProofMessage implements Serializable {
 		tx.getConfidence().addEventListener(new Listener() {
 			
 			@Override
-			public void onConfidenceChanged(TransactionConfidence arg0,
-					ChangeReason arg1) {
+			public void onConfidenceChanged(TransactionConfidence confidence,
+					ChangeReason reason) {
 				//TODO make sure that listener is only registered once, and not in many different places
-				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
-					appearedInChainheight = arg0.getAppearedAtChainHeight();
+				if(confidence.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+					appearedInChainheight = confidence.getAppearedAtChainHeight();
 					for(ProofConfidenceChangeEventListener l : proofConfidenceChangeListeners) {
 						l.onProofConfidenceChanged();
 					}
@@ -477,10 +478,10 @@ public class ProofMessage implements Serializable {
 				getLastTransaction().getConfidence().addEventListener(new Listener() {
 
 					@Override
-					public void onConfidenceChanged(TransactionConfidence arg0,
-							ChangeReason arg1) {
-						if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
-							appearedInChainheight = arg0.getAppearedAtChainHeight();
+					public void onConfidenceChanged(TransactionConfidence confidence,
+							ChangeReason reason) {
+						if(confidence.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+							appearedInChainheight = confidence.getAppearedAtChainHeight();
 							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
 							for(ProofConfidenceChangeEventListener l : proofConfidenceChangeListeners) {
 								l.onProofConfidenceChanged();
@@ -611,9 +612,9 @@ public class ProofMessage implements Serializable {
 	public void addWaitForDataListener(WaitForDataListener listener) {
 		this.waitForDataListeners.add(listener);
 	}
-	private void waitForData(boolean status) {
+	private void waitForData(boolean waiting) {
 		for (WaitForDataListener listener : waitForDataListeners) {
-			listener.waitForData(status);
+			listener.waitForData(waiting);
 		}
 	}
 

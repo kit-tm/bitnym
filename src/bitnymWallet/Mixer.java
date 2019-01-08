@@ -25,7 +25,14 @@ import edu.kit.tm.ptp.SendListener;
 //TODO refactor into one branch, mix outputs, send back for signing, and sign ourselves, less code => less bugs
 
 public class Mixer {
-
+	public enum AbortCode {
+		TIMEOUT,
+		NO_PARTNER,
+		PROOF_INVALID,
+		PARTNER_ABORT,
+		MIX_SIMULTAN,
+		BROADCAST_OLD,
+	}
 	private BitNymWallet wallet;
 	private BroadcastAnnouncement bca;
 	private Identifier mixPartnerAdress;
@@ -101,7 +108,7 @@ public class Mixer {
 		this.lockTime = 0;
 	}
 	
-	public void passiveMix(byte[] arg0) {
+	public void passiveMix(byte[] proofData) {
 		Context.propagate(context);
 		wallet.ptp.setSendListener(new SendListener() {
 
@@ -127,23 +134,23 @@ public class Mixer {
 			@Override
 			public void messageReceived(MixAbortMessage msg, Identifier identifier) {
 				System.out.println("Passive: Abort received from " + identifier);
-				mixAbort(10);
+				mixAbort(AbortCode.PARTNER_ABORT);
 			}
 		});
 		//received serialized proof, so deserialize, and check proof
 		System.out.println("check partner proof");
-		this.partnerProof = (ProofMessage) deserialize(arg0);
+		this.partnerProof = (ProofMessage) deserialize(proofData);
 		partnerProof.addWaitForDataListener(new WaitForDataListener() {
 			@Override
-			public void waitForData(boolean status) {
+			public void waitForData(boolean waiting) {
 				for(WaitForDataListener listener : waitForDataListeners) {
-					listener.waitForData(status);
+					listener.waitForData(waiting);
 				}
 			}
 		});
 		if(!partnerProof.isProbablyValid(params, bc, pg)) { //TODO is it possible that invalid is returned although it should be valid?
 			System.out.println("proof of mix partner is invalid");
-			mixAbort(5);
+			mixAbort(AbortCode.PROOF_INVALID);
 			return;
 		}
 		//send own proof to partner
@@ -151,14 +158,14 @@ public class Mixer {
 		this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 			@Override
-			public void messageReceived(SendProofMessage msg, Identifier arg1) {
+			public void messageReceived(SendProofMessage msg, Identifier ident) {
 				//deserialize received tx, and add own input and output and
 				//sign then and send back
 				System.out.println("try to deserialize tx received from mixpartner");
 				final Transaction rcvdTx = deserializeTransaction(msg.data);
 				if(!checkTxInputIsFromProof(rcvdTx, 0)) {
 					System.out.println("checktxinput is from proof failed");
-					mixAbort(5);
+					mixAbort(AbortCode.PROOF_INVALID);
 					return;
 				}
 				final int outputOrder = rcvdTx.getOutputs().size();
@@ -186,7 +193,7 @@ public class Mixer {
 					wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 						
 						@Override
-						public void messageReceived(SendProofMessage msg, Identifier arg1) {
+						public void messageReceived(SendProofMessage msg, Identifier ident) {
 							//deserialize tx, check rcvd Tx, then sign and broadcast
 							
 							Transaction lastTxVersion = deserializeTransaction(msg.data);
@@ -202,7 +209,7 @@ public class Mixer {
 								broadcastMixTx(outputOrder, outSp, lastTxVersion, 1);
 							} catch (ScriptException e) {
 								e.printStackTrace();
-								mixAbort(5);
+								mixAbort(AbortCode.PROOF_INVALID);
 								return;
 							}
 						}
@@ -221,7 +228,7 @@ public class Mixer {
 						rcvdTx.getInput(1).verify(ownProof.getLastTransactionOutput());
 					} catch(ScriptException e) {
 						e.printStackTrace();
-						mixAbort(5);
+						mixAbort(AbortCode.PROOF_INVALID);
 						return;
 					}
 
@@ -231,7 +238,7 @@ public class Mixer {
 					wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 						
 						@Override
-						public void messageReceived(SendProofMessage msg, Identifier arg1) {
+						public void messageReceived(SendProofMessage msg, Identifier ident) {
 							// TODO Auto-generated method stub
 							if(!checkTx(rcvdTx, deserializeTransaction(msg.data))) {
 								System.out.println("checktx failed");
@@ -266,15 +273,14 @@ public class Mixer {
 		}
 		//return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
 		// TODO sometimes index i is too high (1, but array size of rcvdTx only 1)
-		try {
+		if (rcvdTx.getInputs().size() > i) {
 			System.out.println("DEBUG: transaction for comparison " + rcvdTx.getInput(i).getOutpoint().toString() + "(" + rcvdTx.getInput(i).getOutpoint().getHash() + ")");
 			System.out.println("DEBUG: last transaction of partner " + partnerProof.getLastTransaction().toString() + "(" + partnerProof.getLastTransaction().getHash() + ")");
 			System.out.println("DEBUG: Index 1(Partner): " + partnerProof.getLastTransactionOutput().getIndex() + ", Index 2(TX): " + rcvdTx.getInput(i).getOutpoint().getIndex());
 			return rcvdTx.getInput(i).getOutpoint().getHash().equals(partnerProof.getLastTransaction().getHash()) &&
 					partnerProof.getLastTransactionOutput().getIndex() == rcvdTx.getInput(i).getOutpoint().getIndex();
-		} catch (IndexOutOfBoundsException e) {
+		} else {
 			System.out.println("Transaction index too high, abort mixing");
-			e.printStackTrace();
 			return false;
 		}
 	}
@@ -316,7 +322,7 @@ public class Mixer {
 		System.out.println("initiateMix");
 		if(this.mixPartnerAdress == null) {
 			System.out.println("No mix partner");
-			mixAbort(1);
+			mixAbort(AbortCode.NO_PARTNER);
 			return; //? why no return
 		}
 		
@@ -333,13 +339,13 @@ public class Mixer {
 			
 			//deserialize proof
 			@Override
-			public void messageReceived(SendProofMessage msg, Identifier arg1) {
+			public void messageReceived(SendProofMessage msg, Identifier ident) {
 				partnerProof = (ProofMessage) deserialize(msg.data);
 				//check proof
 				System.out.println("check partner proof");
 				if(!partnerProof.isProbablyValid(params, bc, pg)) {
 					System.out.println("proof of mix partner is invalid, abort");
-					mixAbort(5);
+					mixAbort(AbortCode.PROOF_INVALID);
 					return;
 				}
 				challengeResponse();
@@ -355,7 +361,7 @@ public class Mixer {
 			@Override
 			public void messageReceived(MixAbortMessage msg, Identifier identifier) {
 				System.out.println("Active: Abort received from " + identifier);
-				mixAbort(10);
+				mixAbort(AbortCode.PARTNER_ABORT);
 			}
 		});
 
@@ -384,10 +390,10 @@ public class Mixer {
 //			}
 		}
 	}
-	private void mixAbort(int errorCode) {
+	private void mixAbort(AbortCode errorCode) {
 		mixing = false;
 		// inform mixpartner about abort
-		if(errorCode == 5) {
+		if(errorCode == AbortCode.NO_PARTNER) {
 			sendAbort(mixPartnerAdress);
 		}
 		for (MixAbortEventListener listener : maListeners) {
@@ -459,13 +465,14 @@ public class Mixer {
 				System.out.println("Mix request received, mixing passive");
 				if (mixing) {
 					// mixing active, do not mix passive
-					System.out.println("Already mixing, can't mix passive. Check if simultaneously mixing active");
+					System.out.println("Already mixing, can't mix passive. Checking if simultaneously mixing active");
+					// check if mix request is from same source, if not ignore mix request
 					if (mixPartnerAdress.equals(source)) {
 						if (mixRequestTimestamp != 0) {
 							if(mixRequestTimestamp == mixRequestMessage.timeStamp) {
 								// abort
-								System.out.println("Can't determine active/passive");
-								mixAbort(11);
+								System.out.println("Can't determine active/passive, abort");
+								mixAbort(AbortCode.MIX_SIMULTAN);
 								return;
 							}
 							if (mixRequestMessage.timeStamp > mixRequestTimestamp) {
@@ -477,6 +484,7 @@ public class Mixer {
 						System.out.println("mix passive");
 						passiveMix(mixRequestMessage.data);
 					}
+					System.out.println("ignore mix request");
 					return;
 				}
 				mixPartnerAdress = source;
@@ -494,7 +502,7 @@ public class Mixer {
 		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
-			public void messageReceived(byte[] arg0, Identifier arg1) {
+			public void messageReceived(byte[] msg, Identifier identifier) {
 				
 			}
 		});
@@ -603,7 +611,7 @@ public class Mixer {
 			this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 				@Override
-				public void messageReceived(SendProofMessage msg, Identifier arg1) {
+				public void messageReceived(SendProofMessage msg, Identifier source) {
 					final Transaction rcvdTx = deserializeTransaction(msg.data);
 					if(!checkTxInputIsFromProof(rcvdTx, 1)) {
 						System.out.println("tx input from received tx is not the same as in the proof");
@@ -617,8 +625,9 @@ public class Mixer {
 						rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
 						rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
 					} catch (Exception e) {
+						System.out.println("DEBUG: WHICH EXCEPTIONS HAPPEN HERE?");
 						e.printStackTrace();
-						mixAbort(5);
+						mixAbort(AbortCode.PROOF_INVALID);
 						return;
 					}
 					//this method just does rudimentary checks, does not check whether inputs are already spent for example
@@ -643,7 +652,7 @@ public class Mixer {
 			this.wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 				@Override
-				public void messageReceived(SendProofMessage msg, Identifier arg1) {
+				public void messageReceived(SendProofMessage msg, Identifier source) {
 					// add our output, sign and send to partner then
 					try {
 						final Transaction penFinalTx = deserializeTransaction(msg.data);
@@ -660,7 +669,7 @@ public class Mixer {
 					wallet.ptp.setReceiveListener(SendProofMessage.class, new MessageReceivedListener<SendProofMessage>() {
 
 						@Override
-						public void messageReceived(SendProofMessage msg, Identifier arg1) {
+						public void messageReceived(SendProofMessage msg, Identifier source) {
 							System.out.println("Active last Message received");
 							// TODO Auto-generated method stub
 							if(!checkTx(penFinalTx, deserializeTransaction(msg.data))) {
@@ -674,7 +683,7 @@ public class Mixer {
 					System.out.println("done");
 					} catch (Exception e) {
 						e.printStackTrace();
-						mixAbort(5);
+						mixAbort(AbortCode.PROOF_INVALID);
 						return;
 					}
 				}
@@ -699,11 +708,11 @@ public class Mixer {
 	}
 
 
-	private Transaction deserializeTransaction(byte[] arg0) {
+	private Transaction deserializeTransaction(byte[] txData) {
 		Transaction rcvdTx = null;
 		BitcoinSerializer bs = new BitcoinSerializer(params, false);
 		try {
-			rcvdTx = bs.makeTransaction(arg0);
+			rcvdTx = bs.makeTransaction(txData);
 		} catch (ProtocolException | NegativeArraySizeException e) {
 			e.printStackTrace();
 		}
@@ -722,9 +731,8 @@ public class Mixer {
 		System.out.println(rcvdTx);
 		//ping();
 		wallet.ptp.setSendListener(new SendListener() {
-			
 			@Override
-			public void messageSent(long arg0, Identifier arg1, State arg2) {
+			public void messageSent(long id, Identifier destination, State state) {
 				System.out.println("message sent is called, creating new hidden service");
 				wallet.restartPTP();
 				for(MixFinishedEventListener l : mfListeners) {
@@ -753,12 +761,12 @@ public class Mixer {
 		rcvdTx.getConfidence().addEventListener(new TransactionConfidence.Listener() {
 			
 			@Override
-			public void onConfidenceChanged(TransactionConfidence arg0,
-					ChangeReason arg1) {
-				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+			public void onConfidenceChanged(TransactionConfidence confidence,
+					ChangeReason reason) {
+				if(confidence.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					return;
 				}
-				if(arg0.getDepthInBlocks() >= 1) {
+				if(confidence.getDepthInBlocks() >= 1) {
 					//add to proof message and write to file
 					System.out.println("confidence of mix tx is 1");
 
@@ -770,10 +778,10 @@ public class Mixer {
 	}
 	
 	private void commitRcvdFinalTx(
-			final CLTVScriptPair outSp, byte[] arg0, int inputOrder, int outputOrder) {
+			final CLTVScriptPair outSp, byte[] txData, int inputOrder, int outputOrder) {
 		System.out.println("call commitrcvdfinaltx");
 		System.out.println("deserialize finished transaction");
-		final Transaction finishedTx = deserializeTransaction(arg0);
+		final Transaction finishedTx = deserializeTransaction(txData);
 		finishedTx.verify();
 		System.out.println("print finishedtx");
 		System.out.println(finishedTx);
@@ -791,14 +799,14 @@ public class Mixer {
 
 			@Override
 			public void onConfidenceChanged(
-					TransactionConfidence arg0,
-					ChangeReason arg1) {
-				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+					TransactionConfidence confidence,
+					ChangeReason reason) {
+				if(confidence.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
 					return;
 				}
-				if(arg0.getDepthInBlocks() >= 1) {
+				if(confidence.getDepthInBlocks() >= 1) {
 					//add to proof message and write to file
-					System.out.println("confidence of mix tx is " + arg0.getDepthInBlocks());
+					System.out.println("confidence of mix tx is " + confidence.getDepthInBlocks());
 
 					finishedTx.getConfidence().removeEventListener(this);
 				}
