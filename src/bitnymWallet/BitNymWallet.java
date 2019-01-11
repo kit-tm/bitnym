@@ -1,38 +1,30 @@
 package bitnymWallet;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.BloomFilter;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.InsufficientMoneyException;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.Peer;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.VerificationException;
+import edu.kit.tm.ptp.Identifier;
+import edu.kit.tm.ptp.MessageReceivedListener;
+import org.bitcoinj.core.*;
 import org.bitcoinj.core.TransactionConfidence.Listener;
-import org.bitcoinj.core.TransactionConfidence.Listener.ChangeReason;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
 import org.bitcoinj.core.listeners.PeerConnectedEventListener;
 import org.bitcoinj.net.BlockingClientManager;
-import org.bitcoinj.net.discovery.DnsDiscovery;
-import org.bitcoinj.params.TestNet3Params;
+import org.bitcoinj.params.RegTestParams;
 import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.store.SPVBlockStore;
 import org.bitcoinj.wallet.UnreadableWalletException;
@@ -47,21 +39,24 @@ import edu.kit.tm.ptp.PTP;
 
 
 public class BitNymWallet {
-	
+
+	// TODO(SF): Clean up all this ptp.receive(byte[]) stuff and use seperate classes for it
+
 	//TODO check before mixing that proof passed the bitcoin bip113 time, so that it is free to be spend
 	//TODO call timechangedevent listeners on new bestblock or reorganize
 	
 	private static final Logger log = LoggerFactory.getLogger(BitNymWallet.class);
-	public static Coin PSNYMVALUE = Coin.valueOf(200000);
+	public static Coin PSNYMVALUE = Coin.valueOf(90000000);
 	public static Coin PROOF_OF_BURN = Coin.valueOf(50000);
-	private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
+	//private static Coin totalOutput = PSNYMVALUE.add(PROOF_OF_BURN.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE));
+
+	private final static String FILENAME_PEERS = "ptp-bitnym/config/bitcoin.peers";
 
 	
-	
-	
 	private NetworkParameters params;
+	private Context context;
 	private PeerGroup pg;
-	private PTP ptp;
+	PTP ptp;
 	private TransactionGenerator tg;
 	private File walletFile;
 	private Wallet wallet;
@@ -75,38 +70,56 @@ public class BitNymWallet {
 	private List<ProofConfidenceChangeEventListener> proofChangeConfidenceListeners;
 	private List<ProofChangeEventListener> proofChangeListeners;
 	private List<TimeChangedEventListener> timeChangedListeners;
-	private List<BroadcastAnnouncementChangeEventListener> baListeners;
-	private List<MixFinishedEventListener> mfListeners;
+	private List<MixingEventListener> mixListeners;
+	private List<WaitForDataListener> waitForDataListeners;
 	private ChallengeResponseVerifier crv;
+
+	private BroadcastAnnouncementChangeEventListener broadcastListener;
+	private TransactionGeneratorListener tgListener;
+
+	/** time in minutes a broadcast is valid
+	 *
+	 */
+	private final int BROADCAST_TIME = 5;
+
+	// from BitNymWrapper
+	/**
+	 * true if listener added to mixer, false otherwise. Set to false on re initialising after successful mixing
+	 */
+	private boolean listenerAdded = false;
+
+	/**
+	 * true if mixing finished or aborted, Timer will stop
+	 */
+	private boolean stopTimeout = false;
 
 	//TODO refactoring: extend bitcoinj wallet and remove wallet field, pass this to functions which need wallet
 	
 	
 	public BitNymWallet() {
-		MainClass.params = TestNet3Params.get();
-		params = TestNet3Params.get();
-
+		//MainClass.params = TestNet3Params.get();
+		MainClass.params = RegTestParams.get();
+		params = MainClass.params;
+		// TODO(PM) use context as parameter at certain methods to avoid bitcoinj warnings
+		context = new Context(params);
 		proofChangeConfidenceListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
 		timeChangedListeners = new ArrayList<TimeChangedEventListener>();
-
+		mixListeners = new ArrayList<MixingEventListener>();
+		waitForDataListeners = new ArrayList<WaitForDataListener>();
 
 		//ptp = new PTP(System.getProperty("user.dir"), 9051, 9050);
-		ptp = new PTP(System.getProperty("user.dir"));
-		try {
-			//TODO move ptp to mixer
-			log.info("initiate ptp and create hidden service");
-			ptp.init();
-			System.out.println("executed ptp init");
-			ptp.createHiddenService();
-			System.out.println(ptp.getIdentifier().getTorAddress());
-		} catch (IOException e3) {
-			e3.printStackTrace();
-		}
+		restartPTP();
+
+		// register classes for ptp used in Mixer
+		ptp.registerClass(MixRequestMessage.class);
+		ptp.registerClass(SendProofMessage.class);
+		ptp.registerClass(MixAbortMessage.class);
+
 		wallet = null;
 		walletFile = new File("./wallet.wa");
 		if(!walletFile.exists()) {
-			wallet = new Wallet(params);
+			wallet = new Wallet(context);
 			try {
 				wallet.saveToFile(walletFile);
 			} catch (IOException e) {
@@ -132,7 +145,7 @@ public class BitNymWallet {
 			e.printStackTrace();
 		}
 		try {
-			bc = new BlockChain(params, wallet, spvbs);
+			bc = new BlockChain(context, wallet, spvbs);
 		} catch (BlockStoreException e) {
 			e.printStackTrace();
 		}
@@ -151,11 +164,49 @@ public class BitNymWallet {
 		//don't use orchid, seems not maintained, and last time checked the dirauth keys were outdated ...
 		//System.setProperty("socksProxyHost", "127.0.0.1");
 		//System.setProperty("socksProxyPort", "9050");
-		pg = new PeerGroup(params, bc, new BlockingClientManager());
+		pg = new PeerGroup(context, bc, new BlockingClientManager());
 		pg.addWallet(wallet);
 
 		//TODO DNS through Tor without Orchid, as it is not maintained
-		pg.addPeerDiscovery(new DnsDiscovery(params));
+		//pg.addPeerDiscovery(new DnsDiscovery(params));
+
+		// Load peers from file
+		if (!Files.exists(Paths.get(FILENAME_PEERS))) {
+			System.err.println("File with bitcoin peers ('" + FILENAME_PEERS + "') does not exist."
+					+ "Create it with one peer IP address per line. You need at least 2 peers.");
+			System.exit(50);
+		}
+		List<String> peers;
+		try {
+			peers = Files.readAllLines(Paths.get(FILENAME_PEERS), StandardCharsets.UTF_8);
+			if (peers.size() < 2) {
+				System.err.println("Error reading \"" + FILENAME_PEERS + "\": Not enough peers");
+				System.exit(51);
+			}
+			for (String peer : peers) {
+				try {
+					pg.addAddress(InetAddress.getByName(peer));
+				} catch (UnknownHostException e) {
+					e.printStackTrace();
+				}
+			}
+		} catch (IOException e2) {
+			e2.printStackTrace();
+			System.exit(52);
+		}
+		// 2 peers are enough
+		pg.setMaxConnections(5);
+
+		/*
+		// TODO(SF): Remove failing peers
+		pg.addDisconnectedEventListener(new PeerDisconnectedEventListener() {
+
+			@Override
+			public void onPeerDisconnected(Peer peer, int peerCount) {
+				pg.remove
+			}
+		});*/
+
 		System.out.println("download chain");
 		pg.start();
 		pg.downloadBlockChain();
@@ -168,10 +219,10 @@ public class BitNymWallet {
 		pg.addConnectedEventListener(new PeerConnectedEventListener() {
 
 			@Override
-			public void onPeerConnected(Peer arg0, int arg1) {
-				BloomFilter filter = arg0.getBloomFilter();
+			public void onPeerConnected(Peer peer, int peerCount) {
+				BloomFilter filter = peer.getBloomFilter();
 				filter.insert(BroadcastAnnouncement.magicNumber);			
-				arg0.setBloomFilter(filter);
+				peer.setBloomFilter(filter);
 			}
 		});
 		insertIdentifierIntoFilter();
@@ -187,14 +238,20 @@ public class BitNymWallet {
 		log.info("insert our broadcast transaction identifier string, into bloom filter of current download peer");
 		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 
+		System.out.println("Current receive address: " + wallet.currentReceiveAddress().toBase58());
 
 		log.info("Current ESTIMATED balance: " + wallet.getBalance(BalanceType.ESTIMATED).toFriendlyString());
 		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
-		System.out.println(wallet.currentReceiveAddress().toBase58());
-
-
-		log.info("Current AVAILABLE balance: " + wallet.getBalance().toFriendlyString());
-
+		
+		/*
+		// Send all coins back to faucet
+		Address targetAddress = new Address(params, "mwCwTceJvYV27KXBc3NJZys6CjsgsoeHmf");
+		try {
+			wallet.sendCoins(SendRequest.emptyWallet(targetAddress));
+		} catch (InsufficientMoneyException e) {
+			e.printStackTrace();
+		}
+		*/
 
 
 		try {
@@ -210,11 +267,19 @@ public class BitNymWallet {
 		System.out.println("addblocksdownloadedeventlistener");
 
 
-		tg = new TransactionGenerator(params, pg, wallet, bc);
+		tg = new TransactionGenerator(context, pg, wallet, bc);
 		
-		m = new Mixer(ptp, pm, wallet, params, pg, bc);
+		m = new Mixer(this, pm, wallet, context, pg, bc);
+
+		pm.addWaitForDataListener(new WaitForDataListener() {
+			@Override
+			public void waitForData(boolean waiting) {
+				for(WaitForDataListener listener : waitForDataListeners)
+					listener.waitForData(waiting);
+			}
+		});
 		
-		crv = new ChallengeResponseVerifier(ptp, wallet, params, pg, bc);
+		crv = new ChallengeResponseVerifier(this, wallet, params, pg, bc);
 
 
 		//assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
@@ -224,7 +289,7 @@ public class BitNymWallet {
 		wallet.addReorganizeEventListener(new WalletReorganizeEventListener() {
 			
 			@Override
-			public void onReorganize(Wallet arg0) {
+			public void onReorganize(Wallet wallet) {
 				for(TimeChangedEventListener l : timeChangedListeners) {
 					l.onTimeChangedEvent();
 				}
@@ -233,18 +298,18 @@ public class BitNymWallet {
 		bc.addNewBestBlockListener(new NewBestBlockListener() {
 			
 			@Override
-			public void notifyNewBestBlock(StoredBlock arg0)
+			public void notifyNewBestBlock(StoredBlock block)
 					throws VerificationException {
 				for(TimeChangedEventListener l : timeChangedListeners) {
 					l.onTimeChangedEvent();
 				}
 			}
 		});
-		
+
 		wallet.addChangeEventListener(new WalletChangeEventListener() {
 			
 			@Override
-			public void onWalletChanged(Wallet arg0) {	
+			public void onWalletChanged(Wallet wallet) {
 				insertIdentifierIntoFilter();
 			}
 		});
@@ -267,41 +332,62 @@ public class BitNymWallet {
 	}
 	
 	
-	
 	public void exit() {
+		System.out.println("Exiting Bitnym PTP");
 		ptp.exit();
+		ptp.deleteHiddenService();
+		System.out.println("Exiting Bitnym bitcoin peer group");
 		pg.stop();
+		// close spvbs to release file lock for reinitialising bitnym
+		try {
+			spvbs.close();
+		} catch (BlockStoreException e) {
+			System.out.println("spvbs close failed!");
+			e.printStackTrace();
+		}
+		System.out.println("Done exiting Bitnym");
 	}
 	
 	
-	public void generateGenesisTransaction(int lockTime) {
-		Transaction genesisTx;
+	/**
+	 * Generates and broadcasts a genesis transaction.
+	 * @param lockTime
+	 * @return \c True when the transaction has been send, \c false if there already is a proof
+	 *         or not enough money exists
+	 */
+	public boolean generateGenesisTransaction(int lockTime) {
+		Context.propagate(context);
+		//generate genesis transaction if our proof is empty
+		if(pm.getValidationPath().size() != 0 || !wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
+			return false;
+		}
 		try {
-			//generate genesis transaction if our proof is empty
-			if(pm.getValidationPath().size() == 0 && wallet.getBalance(BalanceType.AVAILABLE).isGreaterThan(PSNYMVALUE)) {
-				genesisTx = tg.generateGenesisTransaction(pm, walletFile, lockTime);
-				//TODO register listener before sending tx out, to avoid missing a confidence change
-				genesisTx.getConfidence().addEventListener(new Listener() {
+			Transaction genesisTx = tg.generateGenesisTransaction(pm, walletFile, lockTime);
+			//TODO register listener before sending tx out, to avoid missing a confidence change
+			genesisTx.getConfidence().addEventListener(new Listener() {
 
-					@Override
-					public void onConfidenceChanged(TransactionConfidence arg0,
-							ChangeReason arg1) {
-						if (arg0.getConfidenceType() != TransactionConfidence.ConfidenceType.BUILDING) {
-							return;
-						}
-						if(arg0.getDepthInBlocks() == 1) {
-							//enough confidence, write proof message to the file system
-							System.out.println("depth of genesis tx is now 1, consider ready for usage");
-						}
+				@Override
+				public void onConfidenceChanged(TransactionConfidence confidence,
+						ChangeReason reason) {
+					if (confidence.getConfidenceType() != TransactionConfidence.ConfidenceType.BUILDING) {
+						return;
 					}
-				});
-			}
+					if(confidence.getDepthInBlocks() == 1) {
+						//enough confidence, write proof message to the file system
+						System.out.println("depth of genesis tx is now 1, consider ready for usage");
+					}
+				}
+			});
+			return true;
 		} catch (InsufficientMoneyException e) {
+			// Should not happen since we check it before
 			e.printStackTrace();
+			return false;
 		}
 	}
 	
 	public void sendBroadcastAnnouncement(int lockTime) {
+		Context.propagate(context);
 		try {
 			System.out.println("sendBroadcastAnnouncement");
 			//if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
@@ -339,10 +425,30 @@ public class BitNymWallet {
 		}		
 	}
 	
+	public void mixWithNewestBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
+		if(pm.isEmpty()) {
+			System.out.println("mixWithNewestBroadcast aborted: No own proof message");
+			return;
+		} else if(pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {
+			System.out.println("mixWithNewestBroadcast aborted: Last transaction is not yet verified " + pm.getLastTransaction().toString());
+			return;
+		} else {
+			m.setBroadcastAnnouncement(mpd.getNewestBroadcast());
+			assert(lockTime >= 0);
+			m.setLockTime(lockTime);
+			m.initiateMix();
+		}
+	}
+
 	public void mixWithRandomBroadcast(int lockTime) throws NoBroadcastAnnouncementsException {
+		Context.propagate(context);
 		//		assert(pg.getDownloadPeer().getBloomFilter().contains(BroadcastAnnouncement.magicNumber));
 		//if(!mpd.hasBroadcasts() || pm.isEmpty()) {
-		if(pm.isEmpty() || pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
+		if(pm.isEmpty()) {	
+			System.out.println("mixWithRandomBroadcast aborted: No own proof message");
+			return;
+		} else if(pm.getLastTransaction().getConfidence().getDepthInBlocks() == 0) {	
+			System.out.println("mixWithRandomBroadcast aborted: Last transaction is not yet verified " + pm.getLastTransaction().toString());
 			return;
 		} else {
 			m.setBroadcastAnnouncement(mpd.getRandomBroadcast());
@@ -351,9 +457,226 @@ public class BitNymWallet {
 			m.initiateMix();
 		}		
 	}
-	
+
+	private void reinitMixer() {
+		stopListeningForMix();
+		m = new Mixer(this, pm, wallet, context, pg, bc);
+		m.addWaitForDataListener(new WaitForDataListener() {
+			@Override
+			public void waitForData(boolean waiting) {
+				for (WaitForDataListener listener : waitForDataListeners) {
+					listener.waitForData(waiting);
+				}
+			}
+		});
+	}
+
+	// Timeout to abort mixing after a certain time
+	private void startTimeout() {
+		Thread thread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				stopTimeout = false;
+				int timeout = 4 * 60;
+				while (timeout > 0 && !stopTimeout) {
+					try {
+						Thread.sleep(1000);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					timeout--;
+				}
+				if (timeout <= 0 && !stopTimeout) {
+					// abort mixing, create new mixer, listener inactive until doMix() is called
+					System.out.println("Mixing aborted: Mixing timed out");
+					mixAborted(Mixer.AbortCode.TIMEOUT);
+				}
+			}
+		});
+		thread.start();
+	}
+
+	/**
+	 *
+	 * @param errorCode
+	 * case 0: abortMessage = "Timeout";
+	 * case 1: abortMessage = "Partner not found";
+	 * case 5: abortMessage = "Partner proof Invalid/could not check TX";
+	 * case 10: abortMessage = "Partner aborted";
+	 * case 11: abortMessage = "Mixing active simultaneously";
+	 */
+	private void mixAborted(Mixer.AbortCode errorCode) {
+		// remove old mixer and create new one after abort event (removes listeners, state etc)
+		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
+		broadcastListener = null;
+		removeTransactionGeneratorListener(tgListener);
+		// avoid using old bc on timeout
+		if(errorCode == Mixer.AbortCode.TIMEOUT) {
+			getBroadcastAnnouncements().clear();
+		}
+		reinitMixer();
+		listenerAdded = false;
+		stopTimeout = true;
+		for (MixingEventListener listener : mixListeners) {
+			listener.onMixAborted(errorCode);
+		}
+	}
+
+	private void mixFinished() {
+		// stop mixing again
+		stopListeningForMix();
+		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
+		removeTransactionGeneratorListener(tgListener);
+		stopTimeout = true;
+		for (MixingEventListener listener : mixListeners) {
+			listener.onMixFinished();
+		}
+	}
+
+	private void mixStarted() {
+		startTimeout();
+		for (MixingEventListener listener : mixListeners) {
+			listener.onMixStarted();
+		}
+	}
+
+	/**
+	 * Starts mixing if broadcast is available, otherwise send broadcast und listen for mix
+	 * @param lockTime
+	 */
+	public void doMix(int lockTime) {
+		Context.propagate(context);
+		listenForMix();
+		if(!listenerAdded) {
+			this.addMixFinishedEventListener(new MixFinishedEventListener() {
+
+				@Override
+				public void onMixFinished() {
+					mixFinished();
+				}
+			});
+
+			this.addMixPassiveEventListener(new MixStartedEventListener() {
+				@Override
+				public void onMixStarted() {
+					mixStarted();
+				}
+			});
+
+			this.addMixAbortEventListener(new MixAbortEventListener() {
+
+				@Override
+				public void onMixAborted(Mixer.AbortCode errorCode) {
+					mixAborted(errorCode);
+				}
+			});
+		}
+		listenerAdded = true;
+		// Remove old broadcasts (older than four minutes)
+		System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
+		System.out.println("Wait random time to receive broadcasts before sending own.");
+		int randomTime = (int) (Math.random() * (5000));
+		try {
+			Thread.sleep(randomTime);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		Set<Transaction> to_remove = new HashSet<Transaction>();
+		for (Transaction t : getBroadcastAnnouncements()) {
+			// Locktime is interpreted as the time when the broadcast has been created
+			if (t.getLockTime() < (getCurrentBIP113Time().getTime() / 1000) - (BROADCAST_TIME * 60)) {
+				to_remove.add(t);
+			}
+		}
+		getBroadcastAnnouncements().removeAll(to_remove);
+		System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
+
+		if (getBroadcastAnnouncements().isEmpty()) {
+			// check what time broadcast would have
+			long bcTime = (CLTVScriptPair.currentBitcoinBIP113Time(bc)-1);
+
+
+			// add listener for tg, so mix can be initiated only after own broadcast was successfully wrote to file
+			tgListener = new TransactionGeneratorListener() {
+				@Override
+				public void onTransactionWroteToFile() {
+					// check if mixing is possible every time a new broadcast is received
+					listenToBroadcasts(lockTime);
+					//check if broadcast
+					if (!getBroadcastAnnouncements().isEmpty()) {
+						System.out.println("Broadcast found, try mixing");
+						try {
+							mixWithNewestBroadcast(lockTime);
+							// Remove all stored broadcasts since one of them has been used
+							getBroadcastAnnouncements().clear();
+						} catch (NoBroadcastAnnouncementsException e1) {
+							// Should not happen
+							e1.printStackTrace();
+						}
+					}
+				}
+			};
+			addTransactionGeneratorListener(tgListener);
+
+			// Send a broadcast ourself
+			sendBroadcastAnnouncement(0);
+			if (bcTime < (getCurrentBIP113Time().getTime() / 1000) - (BROADCAST_TIME * 60)) {
+				System.out.println("Broadcast would be too old. Send new one");
+				mixAborted(Mixer.AbortCode.BROADCAST_OLD);
+			}
+		} else {
+			// There are broadcasts, mix with one of them
+			try {
+				mixWithNewestBroadcast(lockTime);
+				// Remove all stored broadcasts since one of them has been used
+				getBroadcastAnnouncements().clear();
+			} catch (NoBroadcastAnnouncementsException e1) {
+				// Should not happen
+				e1.printStackTrace();
+			}
+		}
+	}
+	/*
 	public void mixWith(BroadcastAnnouncement ba) {
 		
+	}*/
+
+	private void listenToBroadcasts(int lockTime) {
+		// check if mixing is possible every time a new broadcast is received
+		broadcastListener = new BroadcastAnnouncementChangeEventListener() {
+			@Override
+			public void onBroadcastAnnouncementChanged() {
+				System.out.println("BroadcastAnnouncementChange Received");
+				// Remove old broadcasts (older than four minutes)
+				System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
+				Set<Transaction> to_remove = new HashSet<Transaction>();
+				for (Transaction t : getBroadcastAnnouncements()) {
+					// Locktime is interpreted as the time when the broadcast has been created
+					if (t.getLockTime() < (getCurrentBIP113Time().getTime() / 1000) - (BROADCAST_TIME * 60)) {
+						to_remove.add(t);
+					}
+				}
+				getBroadcastAnnouncements().removeAll(to_remove);
+				System.out.println("After removing old ones having " + getBroadcastAnnouncements().size() + " broadcasts.");
+
+				if (getBroadcastAnnouncements().isEmpty()) {
+					// do nothing
+				} else {
+					// There are broadcasts, mix with one of them
+					try {
+						System.out.println("Trying to mix with broadcast");
+						mixWithNewestBroadcast(lockTime);
+						// Remove all stored broadcasts since one of them has been used
+						getBroadcastAnnouncements().clear();
+					} catch (NoBroadcastAnnouncementsException e1) {
+						// Should not happen
+						e1.printStackTrace();
+					}
+				}
+
+			}
+		};
+		addBroadcastAnnouncementChangeEventListener(broadcastListener);
 	}
 	
 	public String getProofMessageString() {
@@ -387,9 +710,29 @@ public class BitNymWallet {
 	public void addBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener listener) {
 		mpd.addBroadcastAnnouncementChangeEventListener(listener);
 	}
+
+	public void addTransactionGeneratorListener(TransactionGeneratorListener listener) {
+		tg.addTransactionGeneratorListener(listener);
+	}
 	
 	public void addMixFinishedEventListener(MixFinishedEventListener listener) {
 		m.addMixFinishedEventListener(listener);
+	}
+
+	public void addMixAbortEventListener(MixAbortEventListener listener) {
+	    m.addMixAbortEventListener(listener);
+	}
+
+	public void addMixPassiveEventListener(MixStartedEventListener listener) {
+	    m.addMixPassiveEventListener(listener);
+	}
+
+	public void addMixingEventListener(MixingEventListener listener) {
+	    mixListeners.add(listener);
+	}
+
+	public void addWaitForDataListener(WaitForDataListener listener) {
+	    waitForDataListeners.add(listener);
 	}
 	
 	public void removeProofConfidenceChangeEventListener(ProofConfidenceChangeEventListener listener) {
@@ -403,14 +746,34 @@ public class BitNymWallet {
 	}
 	
 	public void removeBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener listener) {
-		mpd.removeBroadcastAnnouncementChangeEventListener(listener);
+		if(listener != null) {
+			mpd.removeBroadcastAnnouncementChangeEventListener(listener);
+		}
 	}
-	
+
+	public void removeTransactionGeneratorListener(TransactionGeneratorListener listener) {
+		if(listener != null) {
+			tg.removeTransactionGeneratorListener(listener);
+		}
+	}
+
+	public void removeWaitForDataListener(WaitForDataListener listener) {
+		if(listener != null) {
+			waitForDataListeners.remove(listener);
+		}
+	}
+
 	public void removeMixFinishedEventListener(MixFinishedEventListener listener) {
 		m.removeMixFinishedEventListener(listener);
 	}
 
+	public void removeMixAbortEventListener(MixAbortEventListener listener) {
+		m.removeMixAbortEventListener(listener);
+	}
 
+	public void removeMixPassiveEventListener(MixStartedEventListener listener) {
+		m.removeMixPassiveEventListener(listener);
+	}
 
 	public Transaction getLastTransaction() {
 		return this.pm.getLastTransaction();
@@ -424,6 +787,13 @@ public class BitNymWallet {
 	
 	public void stopListeningForMix() {
 		m.closeListeningForMix();
+	}
+
+	public void abortMixing() {
+		m.closeListeningForMix();
+		removeBroadcastAnnouncementChangeEventListener(broadcastListener);
+		broadcastListener = null;
+		removeTransactionGeneratorListener(tgListener);
 	}
 	
 	public Wallet getWallet() {
@@ -496,10 +866,98 @@ public class BitNymWallet {
 		crv.proveToVerifier(pm, wallet.findKeyFromPubHash(pm.getScriptPair().getPubKeyHash()));
 	}
 
+	/**
+	 * Checks given proof
+	 * @param proof proof to check
+	 * @return null on failure, contained pubkey on success
+	 */
+	public byte[] checkProof(byte[] proof) {
+		Context.propagate(context);
+		try (ByteArrayInputStream bis = new ByteArrayInputStream(proof); ObjectInput in = new ObjectInputStream(bis)) {
+			ProofMessage other_pm = (ProofMessage) in.readObject();
+			other_pm.addWaitForDataListener(new WaitForDataListener() {
+				@Override
+				public void waitForData(boolean waiting) {
+					for(WaitForDataListener listener : waitForDataListeners) {
+						listener.waitForData(waiting);
+					}
+				}
+			});
+			if (!other_pm.isProbablyValid(MainClass.params, bc, pg)) {
+				System.out.println("BitWallet: other_pm is probably invalid");
+				return null;
+			}
+			return other_pm.getScriptPair().getPubKey();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	/**
+	 * Returns a proof to verify with checkProof().
+	 * @return A proof of pseudonym ownership
+	 */
+	public byte[] getProof() {
+		byte[] serialized = null;
+		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		         ObjectOutput out = new ObjectOutputStream(bos)) {
+		        out.writeObject(pm);
+		        serialized = bos.toByteArray();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return serialized;
+	}
+
 
 
 	public String getCurrentOnionAddress() {
 		return ptp.getIdentifier().getTorAddress();
+	}
+
+	void restartPTP() {
+		if (ptp != null) {
+			return;
+		}
+		ptp = new PTP("ptp-bitnym", null);
+		try {
+			//TODO move ptp to mixer
+			log.info("initiate ptp and create hidden service");
+			ptp.init();
+			System.out.println("executed ptp init");
+			ptp.createHiddenService();
+			System.out.println(ptp.getIdentifier().getTorAddress());
+		} catch (IOException e3) {
+			e3.printStackTrace();
+		}
+	}
+
+	public ECKey getPseudonym() {
+		return wallet.findKeyFromPubHash(pm.getScriptPair().getPubKeyHash());
+	}
+
+	/**
+	 * Only for testing
+	 * @return ptp identifier
+	 */
+	public Identifier getIdentifier() {
+		if (ptp.isInitialized()) {
+			return ptp.getIdentifier();
+		} else {
+			return null;
+		}
+	}
+
+	public void sendMessage(Object message, Identifier ident) {
+		try {
+			ptp.sendMessage(message, ident);
+		} catch (IllegalStateException e) {
+			System.err.println("BitNym Unable to send message over PTP! Continuing anyway.");
+			e.printStackTrace();
+		}
 	}
 
 }

@@ -14,22 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
 
-import org.bitcoinj.core.BitcoinSerializer;
-import org.bitcoinj.core.Block;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.BloomFilter;
-import org.bitcoinj.core.FilteredBlock;
-import org.bitcoinj.core.GetDataMessage;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.PartialMerkleTree;
-import org.bitcoinj.core.Peer;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.ProtocolException;
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.Utils;
+import org.bitcoinj.core.*;
 import org.bitcoinj.core.TransactionConfidence.ConfidenceType;
 import org.bitcoinj.core.TransactionConfidence.Listener;
 import org.bitcoinj.core.TransactionOutput;
@@ -60,6 +45,8 @@ public class ProofMessage implements Serializable {
 	private int appearedInChainheight;
 	private List<ProofConfidenceChangeEventListener> proofConfidenceChangeListeners;
 	private List<ProofChangeEventListener> proofChangeListeners;
+
+	private List<WaitForDataListener> waitForDataListeners;
 	
 	public void setValidationPath(List<Transaction> validationPath) {
 		this.validationPath = validationPath;
@@ -87,6 +74,7 @@ public class ProofMessage implements Serializable {
 	//TODO use config file for specification of proofmessage filename
 	public ProofMessage() {		
 		this(System.getProperty("user.dir") + "/proofmessage.pm");
+		this.waitForDataListeners = new ArrayList<WaitForDataListener>();
 	}
 	
 	//use certain proof message file
@@ -94,6 +82,7 @@ public class ProofMessage implements Serializable {
 		//determines the corresponding output within the the mix txs
 		this.proofConfidenceChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		this.proofChangeListeners = new ArrayList<ProofChangeEventListener>();
+		this.waitForDataListeners = new ArrayList<WaitForDataListener>();
 		this.sp = new CLTVScriptPair();
 		this.validationPath = new ArrayList<Transaction>();
 		this.outputIndices = new ArrayList<Integer>();
@@ -129,7 +118,7 @@ public class ProofMessage implements Serializable {
 	public ProofMessage(List<Transaction> vP, List<Integer> oIdices) {
 		this.validationPath = vP;
 		this.outputIndices = oIdices;
-		
+		this.waitForDataListeners = new ArrayList<WaitForDataListener>();
 		
 		assert(vP.size() == oIdices.size());
 	}
@@ -139,6 +128,9 @@ public class ProofMessage implements Serializable {
 	public boolean isValidPath() {
 		//check that the transaction build a path and are not just random txs, 
 		//by checking the tx hashes with those of the outpoints
+		for (Transaction tx : validationPath) {
+			System.out.println("TX: " + tx.getHash().toString());
+		}
 		for(int i=validationPath.size()-1; i > 1; i--) {
 			Transaction tx = validationPath.get(i);
 			if(!tx.getInput(outputIndices.get(i)).getOutpoint().getHash().equals(validationPath.get(i-1).getHash())) {
@@ -146,7 +138,7 @@ public class ProofMessage implements Serializable {
 				return false;
 			}
 		}
-		
+		System.out.println("valid path");
 		return true;
 	}
 	
@@ -170,7 +162,7 @@ public class ProofMessage implements Serializable {
 			System.out.println("genesis tx has not apropriate op_return or doesn't pay the proof of burn");
 			return false;
 		}
-		
+		System.out.println("is genesis");
 		return true;
 	}
 	
@@ -220,67 +212,80 @@ public class ProofMessage implements Serializable {
 		final BlockStore blockstore = bc.getBlockStore();
 		System.out.println("check that transaction is in blockchain");
 		final Peer dpeer = pg.getDownloadPeer();
-		BloomFilter filter = dpeer.getBloomFilter();
 
-		filter.insert(getLastTransaction().getInput(0).getOutpoint().unsafeBitcoinSerialize());
-
-		dpeer.setBloomFilter(filter);
-		GetDataMessage msg = new GetDataMessage(params);
-		assert(appearedInChainheight > 0);
-		msg.addFilteredBlock(getBlockHashByHeight(bc, appearedInChainheight));
 		final Object monitor = new Object();
 		//listener forces monitorstate to be final, so we use a wrapper class, to still be able to modify it
 		class BooleanWrapper {
 			boolean monitorState = false;
-			
+
 			void setMonitorState(boolean b) {
 				this.monitorState = b;
 			}
-			
+
 			boolean getMonitorState() {
 				return this.monitorState;
 			}
 		}
 		final BooleanWrapper monState = new BooleanWrapper();
 		final BooleanWrapper isTxInBlockchain = new BooleanWrapper();
-		dpeer.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
-			
-			@Override
-			public void onBlocksDownloaded(Peer arg0, Block arg1,
-					@Nullable FilteredBlock arg2, int arg3) {
-				System.out.println("execute onblocksdownloaded listener on block + " + arg2.getBlockHeader().getHashAsString());
-				List<Sha256Hash> matchedHashesOut = new ArrayList<>();
-				PartialMerkleTree tree = arg2.getPartialMerkleTree();
-				Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
-				try {
-					if(matchedHashesOut.contains(getLastTransaction().getHash()) &&
-							merkleroot.equals(arg2.getBlockHeader().getMerkleRoot()) &&
-							merkleroot.equals(blockstore.get(arg2.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
-						isTxInBlockchain.setMonitorState(true);
+		GetDataMessage msg = new GetDataMessage(params);
+		assert(appearedInChainheight > 0);
+		msg.addFilteredBlock(getBlockHashByHeight(bc, appearedInChainheight));
+		System.out.println("Block requested: " + getBlockHashByHeight(bc, appearedInChainheight));
+		for(Peer peer : pg.getConnectedPeers()) {
+			BloomFilter filter = peer.getBloomFilter();
+
+			filter.insert(getLastTransaction().getInput(0).getOutpoint().unsafeBitcoinSerialize());
+
+			peer.setBloomFilter(filter);
+
+			peer.addBlocksDownloadedEventListener(new BlocksDownloadedEventListener() {
+
+				@Override
+				public void onBlocksDownloaded(Peer peer, Block block,
+											   @Nullable FilteredBlock filteredBlock, int blocksLeft) {
+					System.out.println("execute onblocksdownloaded listener on block + " + filteredBlock.getBlockHeader().getHashAsString());
+					List<Sha256Hash> matchedHashesOut = new ArrayList<>();
+					PartialMerkleTree tree = filteredBlock.getPartialMerkleTree();
+					Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
+					if (!matchedHashesOut.isEmpty()) {
+						System.out.println(matchedHashesOut.get(0));
 					}
-				} catch (BlockStoreException e) {
-					e.printStackTrace();
+					try {
+						if(matchedHashesOut.contains(getLastTransaction().getHash()) &&
+								merkleroot.equals(filteredBlock.getBlockHeader().getMerkleRoot()) &&
+								merkleroot.equals(blockstore.get(filteredBlock.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
+							isTxInBlockchain.setMonitorState(true);
+						}
+					} catch (BlockStoreException e) {
+						e.printStackTrace();
+					}
+
+					synchronized (monitor) {
+						monState.setMonitorState(false);
+						System.out.println("isTxInBlockchain Finished!");
+						monitor.notifyAll(); // unlock again
+					}
+					peer.removeBlocksDownloadedEventListener(this);
 				}
-				
-				synchronized (monitor) {
-					monState.setMonitorState(false);
-					monitor.notifyAll(); // unlock again
-				}
-				dpeer.removeBlocksDownloadedEventListener(this);
-			}
-		});
-		dpeer.sendMessage(msg);
+			});
+			peer.sendMessage(msg);
+		}
 		System.out.println("send getdatamessage to verify tx is in blockchain");
-		
+		waitForData(true);
 		//return when finished
 		monState.setMonitorState(true);
 		while(monState.getMonitorState()) {
 			synchronized (monitor) {
 				try {
 					monitor.wait();
-				} catch (Exception e) {}
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
 			}
 		}
+		waitForData(false);
+		System.out.println("completed send getdatamessage to verify tx is in blockchain");
 		return isTxInBlockchain.getMonitorState();
 	}
 	
@@ -292,7 +297,7 @@ public class ProofMessage implements Serializable {
 		assert(block != null);
 		for(int i=0; i < bestchainheight-appearedInChainheight2; i++) {
 			try {
-				System.out.println("iteration: " + i);
+				//System.out.println("iteration: " + i);
 				assert(block != null);
 				block = block.getPrev(bc.getBlockStore());
 			} catch (BlockStoreException e) {
@@ -337,11 +342,11 @@ public class ProofMessage implements Serializable {
 		tx.getConfidence().addEventListener(new Listener() {
 			
 			@Override
-			public void onConfidenceChanged(TransactionConfidence arg0,
-					ChangeReason arg1) {
+			public void onConfidenceChanged(TransactionConfidence confidence,
+					ChangeReason reason) {
 				//TODO make sure that listener is only registered once, and not in many different places
-				if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
-					appearedInChainheight = arg0.getAppearedAtChainHeight();
+				if(confidence.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+					appearedInChainheight = confidence.getAppearedAtChainHeight();
 					for(ProofConfidenceChangeEventListener l : proofConfidenceChangeListeners) {
 						l.onProofConfidenceChanged();
 					}
@@ -399,6 +404,7 @@ public class ProofMessage implements Serializable {
 
 		proofConfidenceChangeListeners = new ArrayList<ProofConfidenceChangeEventListener>();
 		proofChangeListeners = new ArrayList<ProofChangeEventListener>();
+		this.waitForDataListeners = new ArrayList<WaitForDataListener>();
 		List vPath, oIndices;
 		List<Transaction> txList = new ArrayList<Transaction>();
 		List<Integer> intList = new ArrayList<Integer>();
@@ -456,10 +462,10 @@ public class ProofMessage implements Serializable {
 				getLastTransaction().getConfidence().addEventListener(new Listener() {
 
 					@Override
-					public void onConfidenceChanged(TransactionConfidence arg0,
-							ChangeReason arg1) {
-						if(arg0.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
-							appearedInChainheight = arg0.getAppearedAtChainHeight();
+					public void onConfidenceChanged(TransactionConfidence confidence,
+							ChangeReason reason) {
+						if(confidence.getConfidenceType().equals(TransactionConfidence.ConfidenceType.BUILDING)) {
+							appearedInChainheight = confidence.getAppearedAtChainHeight();
 							System.out.println("call confidence listener, set appearedinchainheight to " + appearedInChainheight);
 							for(ProofConfidenceChangeEventListener l : proofConfidenceChangeListeners) {
 								l.onProofConfidenceChanged();
@@ -586,6 +592,14 @@ public class ProofMessage implements Serializable {
 	
 	public void setProofConfidenceChangeEventListeners(List<ProofConfidenceChangeEventListener> listeners) {
 		this.proofConfidenceChangeListeners = listeners;
+	}
+	public void addWaitForDataListener(WaitForDataListener listener) {
+		this.waitForDataListeners.add(listener);
+	}
+	private void waitForData(boolean waiting) {
+		for (WaitForDataListener listener : waitForDataListeners) {
+			listener.waitForData(waiting);
+		}
 	}
 
 }

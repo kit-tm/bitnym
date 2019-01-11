@@ -1,35 +1,24 @@
 package bitnymWallet;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import javax.annotation.Nullable;
 
+import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.FilteredBlock;
-import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.Block;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionBroadcast;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
 import org.bitcoinj.core.listeners.NewBestBlockListener;
-import org.bitcoinj.script.Script;
-import org.bitcoinj.wallet.DefaultCoinSelector;
-import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 
 import com.google.common.util.concurrent.ListenableFuture;
@@ -43,6 +32,7 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	private List<Transaction> broadcasts;
 	private Wallet wallet;
 	private List<BroadcastAnnouncementChangeEventListener> listeners;
+	public Transaction lastReceived;
 
 	public MixPartnerDiscovery(NetworkParameters params, PeerGroup pg, BlockChain bc, Wallet wallet) {
 		this.pg = pg;
@@ -126,11 +116,15 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	@Override
 	public void onBlocksDownloaded(Peer arg0, Block arg1,
 			@Nullable FilteredBlock arg2, int arg3) {
-		System.out.println("received block");
+		System.out.println("received block: " + arg2.getBlockHeader().getHashAsString());
+		System.out.println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date()));
+
+		arg2.getTransactionCount();
 		boolean receivedBcastAnnouncmnt = false;
 		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 		for(Transaction tx : assocTxs.values()) {
-			System.out.println("from within mixpartner discovery " + tx);			
+			System.out.println("from within mixpartner discovery " + tx);
+			lastReceived = tx;
 			if(tx.getOutputs().size() > 1 &&
 					BroadcastAnnouncement.isBroadcastAnnouncementScript(tx.getOutput(1).getScriptBytes()))
 					//&& !wallet.isTransactionRelevant(tx)) {
@@ -177,7 +171,24 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 	}
 	
 	public void removeBroadcastAnnouncementChangeEventListener(BroadcastAnnouncementChangeEventListener l) {
+		System.out.println("DEBUG: Remove BCListners. Current size:" + listeners.size());
 		this.listeners.remove(l);
+		System.out.println("DEBUG: Size now: " + listeners.size());
+	}
+
+	public BroadcastAnnouncement getNewestBroadcast() throws NoBroadcastAnnouncementsException {
+		if(broadcasts.size() == 0) {
+			throw new NoBroadcastAnnouncementsException();
+		}
+		Transaction tx = broadcasts.get(0);
+		for (Transaction t : broadcasts) {
+			if (tx.getLockTime() < t.getLockTime()) {
+				tx = t;
+			}
+		}
+		assert(tx != null);
+		//TODO substitute magic number 1 for constant "outputOffsetOfBroadcastAnnouncementOpReturn"
+		return BroadcastAnnouncement.deserialize(tx.getOutput(1).getScriptBytes());
 	}
 
 	public BroadcastAnnouncement getRandomBroadcast() throws NoBroadcastAnnouncementsException {
