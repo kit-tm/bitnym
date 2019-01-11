@@ -67,7 +67,7 @@ public class ChallengeResponseVerifier {
 		System.out.println("draw a challenge string at random");
 		final byte[] challengeString = drawChallengeNumber(20);
 		//System.out.println("drew random string " + javax.xml.bind.DatatypeConverter.printHexBinary(challengeString));
-		this.ptp.setReceiveListener(new ReceiveListener() {
+		this.wallet.ptp.setReceiveListener(new ReceiveListener() {
 			
 			@Override
 			public void messageReceived(byte[] arg0, Identifier arg1) {
