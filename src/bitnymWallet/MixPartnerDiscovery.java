@@ -120,11 +120,6 @@ public class MixPartnerDiscovery implements NewBestBlockListener, BlocksDownload
 		System.out.println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date()));
 
 		arg2.getTransactionCount();
-		String hashes = "DEBUG: Hashes";
-		for (Sha256Hash hash : arg2.getTransactionHashes()) {
-			hashes = hashes + ", " + hash.toString();
-		}
-		System.out.println(hashes);
 		boolean receivedBcastAnnouncmnt = false;
 		Map<Sha256Hash, Transaction> assocTxs = arg2.getAssociatedTransactions();
 		for(Transaction tx : assocTxs.values()) {

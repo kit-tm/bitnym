@@ -80,7 +80,7 @@ public class BitNymWallet {
 	/** time in minutes a broadcast is valid
 	 *
 	 */
-	private final int BROADCAST_TIME = 10;
+	private final int BROADCAST_TIME = 5;
 
 	// from BitNymWrapper
 	/**
@@ -115,14 +115,6 @@ public class BitNymWallet {
 		ptp.registerClass(MixRequestMessage.class);
 		ptp.registerClass(SendProofMessage.class);
 		ptp.registerClass(MixAbortMessage.class);
-		ptp.registerClass(TestMessage.class);
-		ptp.setReceiveListener(TestMessage.class, new MessageReceivedListener<TestMessage>() {
-
-			@Override
-			public void messageReceived(TestMessage message, Identifier source) {
-				System.out.println("TestMessage received from " + source.getTorAddress());
-			}
-		});
 
 		wallet = null;
 		walletFile = new File("./wallet.wa");
@@ -350,7 +342,7 @@ public class BitNymWallet {
 		try {
 			spvbs.close();
 		} catch (BlockStoreException e) {
-			System.out.println("Debug: spvbs close failed!");
+			System.out.println("spvbs close failed!");
 			e.printStackTrace();
 		}
 		System.out.println("Done exiting Bitnym");
@@ -591,12 +583,6 @@ public class BitNymWallet {
 		}
 		Set<Transaction> to_remove = new HashSet<Transaction>();
 		for (Transaction t : getBroadcastAnnouncements()) {
-			DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-			//get current date time with Date()
-			Date date = new Date();
-			System.out.println("Test current time: " + dateFormat.format(date) + "( " + System.currentTimeMillis() + ")");
-			System.out.println("Test blip: " + getCurrentBIP113Time() + "( " + getCurrentBIP113Time().getTime() + ")");
-			System.out.println("Test locktime: " + t.getLockTime());
 			// Locktime is interpreted as the time when the broadcast has been created
 			if (t.getLockTime() < (getCurrentBIP113Time().getTime() / 1000) - (BROADCAST_TIME * 60)) {
 				to_remove.add(t);
@@ -634,14 +620,6 @@ public class BitNymWallet {
 
 			// Send a broadcast ourself
 			sendBroadcastAnnouncement(0);
-			DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-			//get current date time with Date()
-			Date date = new Date();
-			Date bcDate = new Date();
-			bcDate.setTime(bcTime * 1000);
-			System.out.println("Test bcDate: " + bcDate + ". Broadcast is " + bcTime + " old");
-			System.out.println("Test current time: " + dateFormat.format(date) + "( " + System.currentTimeMillis() + ")");
-			System.out.println("Test blip: " + getCurrentBIP113Time() + "( " + getCurrentBIP113Time().getTime() + ")");
 			if (bcTime < (getCurrentBIP113Time().getTime() / 1000) - (BROADCAST_TIME * 60)) {
 				System.out.println("Broadcast would be too old. Send new one");
 				mixAborted(Mixer.AbortCode.BROADCAST_OLD);
@@ -668,17 +646,11 @@ public class BitNymWallet {
 		broadcastListener = new BroadcastAnnouncementChangeEventListener() {
 			@Override
 			public void onBroadcastAnnouncementChanged() {
-				System.out.println("DEBUG: BroadcastAnnouncementChange Received");
+				System.out.println("BroadcastAnnouncementChange Received");
 				// Remove old broadcasts (older than four minutes)
 				System.out.println("Currently having " + getBroadcastAnnouncements().size() + " broadcasts.");
 				Set<Transaction> to_remove = new HashSet<Transaction>();
 				for (Transaction t : getBroadcastAnnouncements()) {
-					DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-					//get current date time with Date()
-					Date date = new Date();
-					System.out.println("Test current time: " + dateFormat.format(date) + "( " + System.currentTimeMillis() + ")");
-					System.out.println("Test blip: " + getCurrentBIP113Time() + "( " + getCurrentBIP113Time().getTime() + ")");
-					System.out.println("Test locktime: " + t.getLockTime());
 					// Locktime is interpreted as the time when the broadcast has been created
 					if (t.getLockTime() < (getCurrentBIP113Time().getTime() / 1000) - (BROADCAST_TIME * 60)) {
 						to_remove.add(t);
@@ -900,7 +872,6 @@ public class BitNymWallet {
 	 * @return null on failure, contained pubkey on success
 	 */
 	public byte[] checkProof(byte[] proof) {
-		System.out.println("DEBUG BitWallet: Check proof");
 		Context.propagate(context);
 		try (ByteArrayInputStream bis = new ByteArrayInputStream(proof); ObjectInput in = new ObjectInputStream(bis)) {
 			ProofMessage other_pm = (ProofMessage) in.readObject();
@@ -913,7 +884,7 @@ public class BitNymWallet {
 				}
 			});
 			if (!other_pm.isProbablyValid(MainClass.params, bc, pg)) {
-				System.out.println("DEBUG BitWallet: other_pm is probably invalid");
+				System.out.println("BitWallet: other_pm is probably invalid");
 				return null;
 			}
 			return other_pm.getScriptPair().getPubKey();

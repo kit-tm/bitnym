@@ -7,7 +7,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -274,9 +273,6 @@ public class Mixer {
 		//return rcvdTx.getInput(i).getConnectedOutput().equals(partnerProof.getLastTransactionOutput());
 		// TODO sometimes index i is too high (1, but array size of rcvdTx only 1)
 		if (rcvdTx.getInputs().size() > i) {
-			System.out.println("DEBUG: transaction for comparison " + rcvdTx.getInput(i).getOutpoint().toString() + "(" + rcvdTx.getInput(i).getOutpoint().getHash() + ")");
-			System.out.println("DEBUG: last transaction of partner " + partnerProof.getLastTransaction().toString() + "(" + partnerProof.getLastTransaction().getHash() + ")");
-			System.out.println("DEBUG: Index 1(Partner): " + partnerProof.getLastTransactionOutput().getIndex() + ", Index 2(TX): " + rcvdTx.getInput(i).getOutpoint().getIndex());
 			return rcvdTx.getInput(i).getOutpoint().getHash().equals(partnerProof.getLastTransaction().getHash()) &&
 					partnerProof.getLastTransactionOutput().getIndex() == rcvdTx.getInput(i).getOutpoint().getIndex();
 		} else {
@@ -329,8 +325,6 @@ public class Mixer {
 		byte[] serializedProof = null;
 		
 		serializedProof = serialize(this.ownProof);
-		System.out.println("New Tx");
-		System.out.println(ownProof.getLastTransaction());
 		
 		System.out.println("mixpartner address " + mixPartnerAdress.getTorAddress());
 		//ping();
@@ -624,8 +618,7 @@ public class Mixer {
 					try {
 						rcvdTx.getInput(0).setScriptSig(inSp.calculateSigScript(rcvdTx, 0, w));
 						rcvdTx.getInput(0).verify(ownProof.getLastTransactionOutput());
-					} catch (Exception e) {
-						System.out.println("DEBUG: WHICH EXCEPTIONS HAPPEN HERE?");
+					} catch (VerificationException e) {
 						e.printStackTrace();
 						mixAbort(AbortCode.PROOF_INVALID);
 						return;
@@ -681,7 +674,7 @@ public class Mixer {
 					});
 					wallet.sendMessage(new SendProofMessage(penFinalTx.bitcoinSerialize()), mixPartnerAdress);
 					System.out.println("done");
-					} catch (Exception e) {
+					} catch (VerificationException e) {
 						e.printStackTrace();
 						mixAbort(AbortCode.PROOF_INVALID);
 						return;

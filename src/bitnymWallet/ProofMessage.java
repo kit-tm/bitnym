@@ -128,14 +128,11 @@ public class ProofMessage implements Serializable {
 	public boolean isValidPath() {
 		//check that the transaction build a path and are not just random txs, 
 		//by checking the tx hashes with those of the outpoints
-		System.out.println("DEBUG PATH:");
 		for (Transaction tx : validationPath) {
 			System.out.println("TX: " + tx.getHash().toString());
 		}
 		for(int i=validationPath.size()-1; i > 1; i--) {
 			Transaction tx = validationPath.get(i);
-			System.out.println("DEBUG: output is " + tx.getInput(outputIndices.get(i)).getOutpoint().getHash());
-			System.out.println("DEBUG: Validationpath is " + validationPath.get(i-1).getHash());
 			if(!tx.getInput(outputIndices.get(i)).getOutpoint().getHash().equals(validationPath.get(i-1).getHash())) {
 				System.out.println("not a valid path!");
 				return false;
@@ -214,11 +211,7 @@ public class ProofMessage implements Serializable {
 		//get filtered block with transaction and check merkel tree
 		final BlockStore blockstore = bc.getBlockStore();
 		System.out.println("check that transaction is in blockchain");
-		System.out.println("DEBUG: Last TX: " + getLastTransaction());
 		final Peer dpeer = pg.getDownloadPeer();
-		System.out.println("Download peer: " + dpeer.toString());
-		System.out.println("Peers connected : " + pg.getConnectedPeers().size());
-
 
 		final Object monitor = new Object();
 		//listener forces monitorstate to be final, so we use a wrapper class, to still be able to modify it
@@ -251,25 +244,17 @@ public class ProofMessage implements Serializable {
 				@Override
 				public void onBlocksDownloaded(Peer peer, Block block,
 											   @Nullable FilteredBlock filteredBlock, int blocksLeft) {
-					System.out.println("Peer: " + peer.toString());
 					System.out.println("execute onblocksdownloaded listener on block + " + filteredBlock.getBlockHeader().getHashAsString());
 					List<Sha256Hash> matchedHashesOut = new ArrayList<>();
 					PartialMerkleTree tree = filteredBlock.getPartialMerkleTree();
 					Sha256Hash merkleroot = tree.getTxnHashAndMerkleRoot(matchedHashesOut);
-					System.out.println("DEBUG: merkleroot:" + merkleroot.toString());
 					if (!matchedHashesOut.isEmpty()) {
 						System.out.println(matchedHashesOut.get(0));
 					}
 					try {
-						System.out.println("DEBUG: Hashes: " + matchedHashesOut.contains(getLastTransaction().getHash()));
-						System.out.println("Hashes should contain " + getLastTransaction().getHash());
-						System.out.println("DEBUG: merkleroot blockHeader " + merkleroot.equals(filteredBlock.getBlockHeader().getMerkleRoot()));
-						System.out.println("DEBUG: merkleroot blockstore" + merkleroot.equals(blockstore.get(filteredBlock.getBlockHeader().getHash()).getHeader().getMerkleRoot()));
-						System.out.println("DEBUG: blocksLeft is " + blocksLeft);
 						if(matchedHashesOut.contains(getLastTransaction().getHash()) &&
 								merkleroot.equals(filteredBlock.getBlockHeader().getMerkleRoot()) &&
 								merkleroot.equals(blockstore.get(filteredBlock.getBlockHeader().getHash()).getHeader().getMerkleRoot())) {
-							System.out.println("DEBUG: isTxInBlockchain TRUE");
 							isTxInBlockchain.setMonitorState(true);
 						}
 					} catch (BlockStoreException e) {
@@ -278,7 +263,7 @@ public class ProofMessage implements Serializable {
 
 					synchronized (monitor) {
 						monState.setMonitorState(false);
-						System.out.println("DEBUG: isTxInBlockchain Finished!");
+						System.out.println("isTxInBlockchain Finished!");
 						monitor.notifyAll(); // unlock again
 					}
 					peer.removeBlocksDownloadedEventListener(this);
@@ -300,8 +285,7 @@ public class ProofMessage implements Serializable {
 			}
 		}
 		waitForData(false);
-		System.out.println("DEBUG: isTxInBlockschain " + isTxInBlockchain.getMonitorState());
-		System.out.println("DEBUG: completed send getdatamessage to verify tx is in blockchain");
+		System.out.println("completed send getdatamessage to verify tx is in blockchain");
 		return isTxInBlockchain.getMonitorState();
 	}
 	

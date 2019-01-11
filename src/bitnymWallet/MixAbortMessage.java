@@ -1,7 +1,7 @@
 package bitnymWallet;
 
 /**
- * Message used for mix request, sent after initiate mix, receiver of this message should try to mix passive
+ * Message used to inform mix partner about abort
  */
 public class MixAbortMessage {
     /** no-arg constructor required for PTP.
